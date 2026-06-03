@@ -1,8 +1,9 @@
-// IGNYX Shell Hub — Module 03 + Module 07 + Module 08 + Module 10
+// IGNYX Shell Hub — Module 03 + Module 07 + Module 08 + Module 10 + Module 12
 // The operator's command center. System status. Module navigation. Mission access.
 // The circuit hum breathes here. The system lives here.
+// Achievements earned. Trophies claimed.
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { ShellLayout } from '../components/ShellLayout';
 import { GlassPanel } from '../components/GlassPanel';
@@ -13,6 +14,7 @@ import { MODULE_NAMES } from '../constants/gameState';
 import { getNextMission } from '../constants/missions';
 import { playAlert } from '../services/AudioEngine';
 import { useSystemDegradation } from '../hooks/useSystemDegradation';
+import { useAchievements } from '../hooks/useAchievements';
 import { useRouter } from 'expo-router';
 
 const MODULE_ORDER: ModuleId[] = ['kernel_core', 'app_layer', 'network', 'data_system', 'security', 'ai_core'];
@@ -38,6 +40,14 @@ export default function ShellScreen() {
 
   // System degradation — the system decays while the operator hesitates
   useSystemDegradation();
+
+  // Achievement tracking (Module 12)
+  const { unlockedCount, totalCount, checkAndUnlock } = useAchievements();
+
+  // Check achievements on shell mount — catches session-based and state-based achievements
+  useEffect(() => {
+    checkAndUnlock();
+  }, []);
 
   // Note: AudioEngine component in ShellLayout auto-syncs ambient to game state
 
@@ -68,6 +78,11 @@ export default function ShellScreen() {
   // Handle settings tap
   const handleSettingsPress = useCallback(() => {
     router.push('/settings');
+  }, [router]);
+
+  // Handle achievements tap (Module 12)
+  const handleAchievementsPress = useCallback(() => {
+    router.push('/achievements');
   }, [router]);
 
   // Get integrity bar color
@@ -214,6 +229,19 @@ export default function ShellScreen() {
             <GlassPanel active style={styles.toolPanel}>
               <Text style={styles.toolIcon}>{'[FS]'}</Text>
               <Text style={styles.toolLabel}>FILES</Text>
+            </GlassPanel>
+          </TouchableOpacity>
+
+          {/* Achievements (Module 12) */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleAchievementsPress}
+            style={styles.toolButton}
+          >
+            <GlassPanel active style={styles.toolPanel}>
+              <Text style={styles.toolIcon}>{'[ACH]'}</Text>
+              <Text style={styles.toolLabel}>TROPHIES</Text>
+              <Text style={styles.toolCount}>{unlockedCount}/{totalCount}</Text>
             </GlassPanel>
           </TouchableOpacity>
 
@@ -392,11 +420,12 @@ const styles = StyleSheet.create({
   // System tools row
   toolsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 20,
   },
   toolButton: {
-    flex: 1,
+    width: '48%',
   },
   toolPanel: {
     flexDirection: 'row',
@@ -413,5 +442,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: 'SpaceMono-Regular',
     letterSpacing: 3,
+    flex: 1,
+  },
+  toolCount: {
+    color: Colors.textAmber,
+    fontSize: 8,
+    fontFamily: 'SpaceMono-Regular',
+    letterSpacing: 0.5,
   },
 });

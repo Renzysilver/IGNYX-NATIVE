@@ -1,6 +1,6 @@
-// IGNYX Game Store — Module 10 + Module 11
+// IGNYX Game Store — Module 10 + Module 11 + Module 12
 // Full state persistence. Revealed files. System degradation. Restore points.
-// XP progression. Level milestones. The system never forgets. The operator evolves.
+// XP progression. Level milestones. Achievements. The system never forgets. The operator evolves.
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -63,6 +63,12 @@ interface GameStore {
   lastXPGain: XPBreakdown | null;
   pendingLevelUp: number | null; // New level if level-up just occurred
 
+  // Achievements (Module 12)
+  unlockedAchievements: string[]; // IDs of unlocked achievements
+  pendingAchievements: string[];  // IDs of newly unlocked (not yet shown to player)
+  lastSpeedBonus: boolean;        // Was last mission completed with speed bonus?
+  lastStreakBonus: boolean;       // Was last mission completed with streak bonus?
+
   // Boot
   hasBooted: boolean;
   hasProfiled: boolean;
@@ -108,6 +114,11 @@ interface GameStore {
   revealFile: (filePath: string) => void;
   isFileRevealed: (filePath: string) => boolean;
   clearPendingLevelUp: () => void;
+  // Achievements (Module 12)
+  unlockAchievement: (id: string) => void;
+  clearPendingAchievements: () => void;
+  setLastSpeedBonus: (active: boolean) => void;
+  setLastStreakBonus: (active: boolean) => void;
   resetGame: () => void;
   persistState: () => Promise<void>;
   hydrateState: () => Promise<void>;
@@ -208,6 +219,7 @@ const serializeState = (state: GameStore): string => {
     'startMission', 'endMission', 'checkRestorePoints', 'loadRestorePoint',
     'revealFile', 'isFileRevealed', 'clearPendingLevelUp', 'resetGame', 'persistState', 'hydrateState',
     'setHasHydrated',
+    'unlockAchievement', 'clearPendingAchievements', 'setLastSpeedBonus', 'setLastStreakBonus',
   ]);
 
   for (const key of Object.keys(state)) {
@@ -240,6 +252,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   totalMissionsFailed: 0,
   lastXPGain: null,
   pendingLevelUp: null,
+  unlockedAchievements: [],
+  pendingAchievements: [],
+  lastSpeedBonus: false,
+  lastStreakBonus: false,
   hasBooted: false,
   hasProfiled: false,
   reducedMotion: false,
@@ -503,6 +519,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   clearPendingLevelUp: () => set({ pendingLevelUp: null }),
 
+  // ── Achievements (Module 12) ────────────────────────────
+
+  unlockAchievement: (id: string) => {
+    const state = get();
+    if (state.unlockedAchievements.includes(id)) return;
+    set({
+      unlockedAchievements: [...state.unlockedAchievements, id],
+      pendingAchievements: [...state.pendingAchievements, id],
+    });
+  },
+
+  clearPendingAchievements: () => set({ pendingAchievements: [] }),
+
+  setLastSpeedBonus: (active: boolean) => set({ lastSpeedBonus: active }),
+
+  setLastStreakBonus: (active: boolean) => set({ lastStreakBonus: active }),
+
   // ── Nuclear Reset ────────────────────────────────────────
 
   resetGame: () => {
@@ -525,6 +558,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       totalMissionsFailed: 0,
       lastXPGain: null,
       pendingLevelUp: null,
+      unlockedAchievements: [],
+      pendingAchievements: [],
+      lastSpeedBonus: false,
+      lastStreakBonus: false,
       hasBooted: false,
       hasProfiled: false,
     });
@@ -573,6 +610,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         totalMissionsFailed: parsed.totalMissionsFailed ?? 0,
         lastXPGain: null,
         pendingLevelUp: null,
+        unlockedAchievements: parsed.unlockedAchievements ?? [],
+        pendingAchievements: [], // Always reset pending on hydration
+        lastSpeedBonus: parsed.lastSpeedBonus ?? false,
+        lastStreakBonus: parsed.lastStreakBonus ?? false,
         hasBooted: parsed.hasBooted ?? false,
         hasProfiled: parsed.hasProfiled ?? false,
         reducedMotion: parsed.reducedMotion ?? false,
@@ -604,7 +645,7 @@ useGameStore.subscribe((state, prevState) => {
   // Skip if only transient fields changed
   const transientKeys = new Set<string>([
     'isEditorFocused', 'activeMission', 'hasHydrated',
-    'lastXPGain', 'pendingLevelUp',
+    'lastXPGain', 'pendingLevelUp', 'pendingAchievements',
   ]);
 
   const changedKeys = Object.keys(state).filter(

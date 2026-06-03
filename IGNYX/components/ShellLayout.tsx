@@ -4,11 +4,12 @@ import { CircuitBackground } from '../components/CircuitBackground';
 import { AlertOverlay, AlertOverlayManager } from '../components/AlertOverlay';
 import { SystemStatusRing } from '../components/SystemStatusRing';
 import { PlayerHUD } from '../components/PlayerHUD';
+import { AchievementToast } from '../components/AchievementToast';
 import { AudioEngine } from '../components/AudioEngine';
 import { Colors } from '../constants/colors';
 
 /**
- * ShellLayout — The 5-layer Glass Neural OS wrapper.
+ * ShellLayout — The 6-layer Glass Neural OS wrapper.
  * Every screen after boot/profiling lives inside this shell.
  * It must feel alive at all times.
  *
@@ -20,6 +21,7 @@ import { Colors } from '../constants/colors';
  * 4. Screen content (injected via children)
  * 5. Alert Overlay (over everything, never blocks editor)
  * 6. Player HUD (bottom corners)
+ * 7. Achievement Toast (top notifications for unlocked achievements)
  */
 interface ShellLayoutProps {
   children: React.ReactNode;
@@ -57,6 +59,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({ children, darkMode = f
 
       {/* LAYER 6 — Alert Overlay (z-ordered highest) */}
       <AlertOverlay />
+
+      {/* LAYER 7 — Achievement Toast (Module 12) */}
+      <AchievementToast />
     </View>
   );
 };

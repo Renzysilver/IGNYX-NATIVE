@@ -1,7 +1,8 @@
-// IGNYX Mission Screen — Module 05 + 06 + 09 + 11
+// IGNYX Mission Screen — Module 05 + 06 + 09 + 11 + 12
 // The operator's crucible. Broken code. A countdown. No second chances.
 // Full mission flow: BRIEFING → ALERT → ACTIVE → RESULT
 // Every mission is a repair. Every repair has consequences. Every XP gain is earned.
+// Every achievement unlocked is remembered.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -42,9 +43,12 @@ import {
   calculateXPGain,
   getMilestonesForLevel,
   getClassTitle,
+  getSpeedBonus,
+  getStreakBonus,
   type XPBreakdown,
 } from '../constants/progression';
 import type { ModuleId } from '../constants/gameState';
+import { useAchievements } from '../hooks/useAchievements';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   playSuccess,
@@ -83,6 +87,11 @@ export default function MissionScreen() {
   const level = useGameStore((s) => s.level);
   const pendingLevelUp = useGameStore((s) => s.pendingLevelUp);
   const clearPendingLevelUp = useGameStore((s) => s.clearPendingLevelUp);
+  const setLastSpeedBonus = useGameStore((s) => s.setLastSpeedBonus);
+  const setLastStreakBonus = useGameStore((s) => s.setLastStreakBonus);
+
+  // Achievement system (Module 12)
+  const { checkAndUnlock } = useAchievements();
 
   // Mission state
   const [stage, setStage] = useState<MissionStage>('briefing');
@@ -342,6 +351,15 @@ export default function MissionScreen() {
       Vibration.vibrate([30, 50, 30]);
       playSuccess();
 
+      // Track speed/streak bonus flags for achievement checking (Module 12)
+      const speedInfo = getSpeedBonus(timeRemainingFraction);
+      const streakInfo = getStreakBonus(consecutiveSuccesses + 1);
+      setLastSpeedBonus(speedInfo.multiplier > 1);
+      setLastStreakBonus(streakInfo.multiplier > 1);
+
+      // Check and unlock any newly earned achievements (Module 12)
+      const newAchievements = checkAndUnlock();
+
       // Trigger level-up celebration if level up occurred
       if (newPendingLevelUp) {
         const milestones = getMilestonesForLevel(newPendingLevelUp);
@@ -407,7 +425,7 @@ export default function MissionScreen() {
         setStage('result');
       }
     }
-  }, [mission, code, stage, moduleId, completeMission, failMissionStore, checkRestorePoints, systemIntegrity, modules, revealFile, operatorClass, consecutiveSuccesses, level, clearPendingLevelUp, timeLeft]);
+  }, [mission, code, stage, moduleId, completeMission, failMissionStore, checkRestorePoints, systemIntegrity, modules, revealFile, operatorClass, consecutiveSuccesses, level, clearPendingLevelUp, setLastSpeedBonus, setLastStreakBonus, checkAndUnlock, timeLeft]);
 
   // ── Handle timeout ───────────────────────────────────────────
 
