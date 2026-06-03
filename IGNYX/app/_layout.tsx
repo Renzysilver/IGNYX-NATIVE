@@ -17,6 +17,7 @@ export default function RootLayout() {
         <Stack.Screen name="profiling" />
         <Stack.Screen name="shell" />
         <Stack.Screen name="terminal" />
+        <Stack.Screen name="filesystem" />
         <Stack.Screen name="mission" />
       </Stack>
     </>

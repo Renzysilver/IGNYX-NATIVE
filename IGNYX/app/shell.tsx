@@ -1,4 +1,4 @@
-// IGNYX Shell Hub — Module 03 + Module 07
+// IGNYX Shell Hub — Module 03 + Module 07 + Module 08
 // The operator's command center. System status. Module navigation. Mission access.
 // The circuit hum breathes here. The system lives here.
 
@@ -54,6 +54,11 @@ export default function ShellScreen() {
   // Handle terminal tap
   const handleTerminalPress = useCallback(() => {
     router.push('/terminal');
+  }, [router]);
+
+  // Handle filesystem tap
+  const handleFilesystemPress = useCallback(() => {
+    router.push('/filesystem');
   }, [router]);
 
   // Get integrity bar color
@@ -173,17 +178,36 @@ export default function ShellScreen() {
           })}
         </View>
 
-        {/* ── Terminal Access ── */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={handleTerminalPress}
-          style={styles.terminalButton}
-        >
-          <GlassPanel active style={styles.terminalPanel}>
-            <Text style={styles.terminalIcon}>{'>'}_</Text>
-            <Text style={styles.terminalLabel}>TERMINAL</Text>
-          </GlassPanel>
-        </TouchableOpacity>
+        {/* ── System Tools ── */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>SYSTEM TOOLS</Text>
+        </View>
+
+        <View style={styles.toolsRow}>
+          {/* Terminal */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleTerminalPress}
+            style={styles.toolButton}
+          >
+            <GlassPanel active style={styles.toolPanel}>
+              <Text style={styles.toolIcon}>{'>'}_</Text>
+              <Text style={styles.toolLabel}>TERMINAL</Text>
+            </GlassPanel>
+          </TouchableOpacity>
+
+          {/* Filesystem Explorer */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleFilesystemPress}
+            style={styles.toolButton}
+          >
+            <GlassPanel active style={styles.toolPanel}>
+              <Text style={styles.toolIcon}>{'[FS]'}</Text>
+              <Text style={styles.toolLabel}>FILES</Text>
+            </GlassPanel>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </ShellLayout>
   );
@@ -344,23 +368,28 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  // Terminal button
-  terminalButton: {
+  // System tools row
+  toolsRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 20,
   },
-  terminalPanel: {
+  toolButton: {
+    flex: 1,
+  },
+  toolPanel: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  terminalIcon: {
+  toolIcon: {
     color: Colors.textCyan,
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'SpaceMono-Regular',
   },
-  terminalLabel: {
+  toolLabel: {
     color: Colors.textCyan,
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'SpaceMono-Regular',
     letterSpacing: 3,
   },
