@@ -10,6 +10,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Colors } from '../constants/colors';
+import { playGlitchShort, playGlitchLong } from '../services/AudioEngine';
 
 interface GlitchOverlayProps {
   intensity?: 'low' | 'medium' | 'high';
@@ -44,6 +45,13 @@ export const GlitchOverlay: React.FC<GlitchOverlayProps> = ({
     }
 
     hasCompleted.current = false;
+
+    // Play glitch sound — short for low/medium, long for high intensity
+    if (intensity === 'high') {
+      playGlitchLong();
+    } else {
+      playGlitchShort();
+    }
 
     // Glitch animation — rapid shifts and opacity changes
     opacity.value = withSequence(

@@ -39,11 +39,12 @@ import {
   type Token,
 } from '../constants/syntax';
 import { useGameStore } from '../store/useGameStore';
-import { pauseAmbientForEditor, resumeAmbientFromEditor } from '../services/AudioEngine';
+import { playKeystroke } from '../services/AudioEngine';
 
 // ─── Layout Constants ──────────────────────────────────────────
 
 const LINE_HEIGHT = 22;
+const KEYSTROKE_THROTTLE_MS = 50;
 const FONT_SIZE = 13;
 const GUTTER_WIDTH = 38;
 const MIN_EDITOR_HEIGHT = 180;
@@ -87,6 +88,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const inputRef = useRef<TextInput>(null);
   const selectionRef = useRef({ start: 0, end: 0 });
   const prevCodeRef = useRef(code);
+  const lastKeystrokeRef = useRef(0);
 
   // Pulse animation for focused border
   const borderPulse = useSharedValue(0.3);
@@ -141,6 +143,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   const handleChange = useCallback(
     (newText: string) => {
+      // ── Throttled keystroke sound ──
+      const now = Date.now();
+      if (now - lastKeystrokeRef.current >= KEYSTROKE_THROTTLE_MS) {
+        lastKeystrokeRef.current = now;
+        playKeystroke();
+      }
+
       const prevText = prevCodeRef.current;
       const cursor = selectionRef.current.start;
 
@@ -259,14 +268,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     setEditorFocused(true);
-    pauseAmbientForEditor(); // Eye of the Hurricane — system holds its breath
     onFocus?.();
   }, [setEditorFocused, onFocus]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
     setEditorFocused(false);
-    resumeAmbientFromEditor(); // System exhales
     onBlur?.();
   }, [setEditorFocused, onBlur]);
 

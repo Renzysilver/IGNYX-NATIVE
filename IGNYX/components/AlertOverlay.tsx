@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useGameStore } from '../store/useGameStore';
 import { Colors } from '../constants/colors';
+import { playAlert } from '../services/AudioEngine';
 import type { GameState } from '../constants/gameState';
 import type { ModuleId } from '../constants/gameState';
 
@@ -66,6 +67,9 @@ export const AlertOverlay: React.FC = () => {
 
   useEffect(() => {
     if (activeAlert) {
+      // Play alert beep sound
+      playAlert();
+
       // Fade in (200ms)
       opacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
       backdropOpacity.value = withTiming(0.4, { duration: 200 });

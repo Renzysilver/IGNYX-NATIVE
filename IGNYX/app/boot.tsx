@@ -22,7 +22,7 @@ import { GlassPanel } from '../components/GlassPanel';
 import { Colors } from '../constants/colors';
 import { useGameStore } from '../store/useGameStore';
 import { useRouter } from 'expo-router';
-import { initializeAudioEngine, playBootFlicker, playGlitchLong, playDesignation } from '../services/AudioEngine';
+import { initializeAudioEngine, playBootFlicker, playDesignation } from '../services/AudioEngine';
 
 type BootStage = 'black' | 'flicker' | 'first_text' | 'rejection' | 'question' | 'input' | 'designation' | 'integration';
 
@@ -191,7 +191,7 @@ export default function BootScreen() {
   const handleFirstTextComplete = useCallback(() => {
     setShowGlitch(true);
     setGlitchIntensity('high');
-    playGlitchLong();
+    // GlitchOverlay will play the glitch_long sound automatically
     setTimeout(() => {
       setShowGlitch(false);
       setStage('rejection');

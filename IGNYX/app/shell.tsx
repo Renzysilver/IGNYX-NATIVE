@@ -2,7 +2,7 @@
 // The operator's command center. System status. Module navigation. Mission access.
 // The circuit hum breathes here. The system lives here.
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { ShellLayout } from '../components/ShellLayout';
 import { GlassPanel } from '../components/GlassPanel';
@@ -11,7 +11,7 @@ import { useGameStore } from '../store/useGameStore';
 import type { ModuleId } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
 import { getNextMission } from '../constants/missions';
-import { updateAmbient, playAlert } from '../services/AudioEngine';
+import { playAlert } from '../services/AudioEngine';
 import { useRouter } from 'expo-router';
 
 const MODULE_ORDER: ModuleId[] = ['kernel_core', 'app_layer', 'network', 'data_system', 'security', 'ai_core'];
@@ -35,10 +35,7 @@ export default function ShellScreen() {
   const xp = useGameStore((s) => s.xp);
   const level = useGameStore((s) => s.level);
 
-  // Start ambient circuit hum on mount
-  useEffect(() => {
-    updateAmbient(gameState);
-  }, [gameState]);
+  // Note: AudioEngine component in ShellLayout auto-syncs ambient to game state
 
   // Handle module tap
   const handleModulePress = useCallback((moduleId: ModuleId) => {

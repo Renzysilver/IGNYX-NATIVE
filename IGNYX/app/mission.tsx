@@ -36,15 +36,10 @@ import {
 import type { ModuleId } from '../constants/gameState';
 import { useRouter } from 'expo-router';
 import {
-  updateAmbient,
   playSuccess,
   playFail,
-  playGlitchShort,
-  playGlitchLong,
   playTimerWarning,
   playAlert,
-  pauseAmbientForEditor,
-  resumeAmbientFromEditor,
 } from '../services/AudioEngine';
 
 type MissionStage = 'alert' | 'active' | 'success' | 'fail' | 'timeout';
@@ -123,8 +118,6 @@ export default function MissionScreen() {
         () => {
           setStage('active');
           startMission(nextMission.id, mId);
-          // Start ambient for current game state
-          updateAmbient(gameState);
         },
       );
     }, 500);
@@ -243,7 +236,6 @@ export default function MissionScreen() {
       setShowGlitch(true);
       setGlitchIntensity('medium');
       Vibration.vibrate([100, 50, 100]);
-      playGlitchShort();
       playFail();
 
       setTimeout(() => {
@@ -271,7 +263,6 @@ export default function MissionScreen() {
     setShowGlitch(true);
     setGlitchIntensity('high');
     Vibration.vibrate([200, 100, 200, 100, 200]);
-    playGlitchLong();
     playFail();
 
     setTimeout(() => {

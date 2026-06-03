@@ -30,6 +30,7 @@ import {
 } from '../constants/profiling';
 import type { OperatorClass } from '../constants/gameState';
 import { useRouter } from 'expo-router';
+import { playAlert, playSuccess, playFail, playDesignation } from '../services/AudioEngine';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -130,6 +131,7 @@ export default function ProfilingScreen() {
 
   // Scanning text → first challenge
   useEffect(() => {
+    playAlert();
     const timer = setTimeout(() => {
       setStage('challenge');
       challengeStartTime.current = Date.now();
@@ -153,8 +155,10 @@ export default function ProfilingScreen() {
     if (isCorrect) {
       setCorrectCount((prev) => prev + 1);
       Vibration.vibrate(30);
+      playSuccess();
     } else {
       Vibration.vibrate([50, 50, 50]);
+      playFail();
     }
 
     // Brief pause, then glitch + next
@@ -183,6 +187,7 @@ export default function ProfilingScreen() {
 
     const calculatedClass = calculateOperatorClass(correctCount, responseTimes);
     setOperatorClass(calculatedClass);
+    playDesignation(); // Sound the designation tone
 
     const sealText = `ARCHITECTURE ANALYSIS COMPLETE.\nCLASSIFICATION: ${calculatedClass}`;
     setSealedText(sealText);

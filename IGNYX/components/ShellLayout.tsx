@@ -4,6 +4,7 @@ import { CircuitBackground } from '../components/CircuitBackground';
 import { AlertOverlay, AlertOverlayManager } from '../components/AlertOverlay';
 import { SystemStatusRing } from '../components/SystemStatusRing';
 import { PlayerHUD } from '../components/PlayerHUD';
+import { AudioEngine } from '../components/AudioEngine';
 import { Colors } from '../constants/colors';
 
 /**
@@ -12,6 +13,7 @@ import { Colors } from '../constants/colors';
  * It must feel alive at all times.
  *
  * Layers (z-ordered bottom to top):
+ * 0. Audio Engine (invisible — syncs game state to sound)
  * 1. Circuit Background (Skia animated nodes)
  * 2. Readability overlay (subtle darkening)
  * 3. System Status Ring (top bar)
@@ -28,6 +30,9 @@ interface ShellLayoutProps {
 export const ShellLayout: React.FC<ShellLayoutProps> = ({ children, darkMode = false }) => {
   return (
     <View style={styles.root}>
+      {/* LAYER 0 — Audio Engine (invisible, syncs state → sound) */}
+      <AudioEngine />
+
       {/* LAYER 1 — Circuit Background */}
       <CircuitBackground />
 
