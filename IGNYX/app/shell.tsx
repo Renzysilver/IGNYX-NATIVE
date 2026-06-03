@@ -1,7 +1,7 @@
-// IGNYX Shell Hub — Module 03 + 07 + 08 + 10 + 12 + 13
+// IGNYX Shell Hub — Module 03 + 07 + 08 + 10 + 12 + 13 + 14
 // The operator's command center. System status. Module navigation. Mission access.
 // The circuit hum breathes here. The system lives here.
-// Achievements earned. Trophies claimed. Events logged.
+// Achievements earned. Trophies claimed. Events logged. Profile exposed.
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
@@ -103,6 +103,16 @@ export default function ShellScreen() {
   // Handle achievements tap (Module 12)
   const handleAchievementsPress = useCallback(() => {
     router.push('/achievements');
+  }, [router]);
+
+  // Handle events tap (Module 14)
+  const handleEventsPress = useCallback(() => {
+    router.push('/events');
+  }, [router]);
+
+  // Handle profile tap (Module 14)
+  const handleProfilePress = useCallback(() => {
+    router.push('/profile');
   }, [router]);
 
   // Get integrity bar color
@@ -222,7 +232,7 @@ export default function ShellScreen() {
           })}
         </View>
 
-        {/* ── System Tools ── */}
+        {/* ── System Tools (3-row grid: 2+2+2) ── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>SYSTEM TOOLS</Text>
         </View>
@@ -252,7 +262,7 @@ export default function ShellScreen() {
             </GlassPanel>
           </TouchableOpacity>
 
-          {/* Achievements (Module 12) */}
+          {/* Achievements */}
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleAchievementsPress}
@@ -262,6 +272,31 @@ export default function ShellScreen() {
               <Text style={styles.toolIcon}>{'[ACH]'}</Text>
               <Text style={styles.toolLabel}>TROPHIES</Text>
               <Text style={styles.toolCount}>{unlockedCount}/{totalCount}</Text>
+            </GlassPanel>
+          </TouchableOpacity>
+
+          {/* Events Log (Module 14) */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleEventsPress}
+            style={styles.toolButton}
+          >
+            <GlassPanel active style={styles.toolPanel}>
+              <Text style={styles.toolIcon}>{'[LOG]'}</Text>
+              <Text style={styles.toolLabel}>EVENTS</Text>
+            </GlassPanel>
+          </TouchableOpacity>
+
+          {/* Operator Profile (Module 14) */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleProfilePress}
+            style={styles.toolButton}
+          >
+            <GlassPanel active style={styles.toolPanel}>
+              <Text style={styles.toolIcon}>{'[OP]'}</Text>
+              <Text style={styles.toolLabel}>PROFILE</Text>
+              <Text style={styles.toolCount}>LV{level}</Text>
             </GlassPanel>
           </TouchableOpacity>
 
@@ -444,7 +479,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  // System tools row
+  // System tools row (3 rows of 2)
   toolsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

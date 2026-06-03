@@ -21,6 +21,8 @@ export default function RootLayout() {
         <Stack.Screen name="mission" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="achievements" />
+        <Stack.Screen name="events" />
+        <Stack.Screen name="profile" />
       </Stack>
     </>
   );
