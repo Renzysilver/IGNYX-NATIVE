@@ -18,13 +18,14 @@ import {
   type FSNode,
 } from '../constants/filesystem';
 import { useGameStore } from '../store/useGameStore';
+import { SEVERITY_COLORS } from '../constants/osEvents';
 
 interface OutputLine {
   text: string;
   color: string;
 }
 
-const SUPPORTED_COMMANDS = ['ls', 'cd', 'cat', 'grep', 'help', 'clear'];
+const SUPPORTED_COMMANDS = ['ls', 'cd', 'cat', 'grep', 'help', 'clear', 'status', 'log', 'whoami', 'scan', 'uptime'];
 
 export default function TerminalScreen() {
   const [currentPath, setCurrentPath] = useState<string[]>(['home', 'operator']);
@@ -103,6 +104,21 @@ export default function TerminalScreen() {
         break;
       case 'clear':
         handleClear();
+        break;
+      case 'status':
+        handleStatus();
+        break;
+      case 'log':
+        handleLog(args);
+        break;
+      case 'whoami':
+        handleWhoami();
+        break;
+      case 'scan':
+        handleScan();
+        break;
+      case 'uptime':
+        handleUptime();
         break;
     }
   }, [currentPath, pathString]);
@@ -277,15 +293,114 @@ export default function TerminalScreen() {
 
   // help — list commands
   const handleHelp = useCallback(() => {
-    addOutput([{
-      text: 'ls    cd    cat    grep    clear    help',
-      color: Colors.textCyan,
-    }]);
+    addOutput([
+      { text: 'FILE SYSTEM:', color: Colors.textDim },
+      { text: '  ls    cd    cat    grep', color: Colors.textCyan },
+      { text: 'SYSTEM:', color: Colors.textDim },
+      { text: '  status    log    whoami    scan    uptime', color: Colors.textCyan },
+      { text: 'UI:', color: Colors.textDim },
+      { text: '  clear    help', color: Colors.textCyan },
+    ]);
   }, []);
 
   // clear — clear terminal output
   const handleClear = useCallback(() => {
     setOutput([]);
+  }, []);
+
+  // status — show system status overview (Module 13)
+  const handleStatus = useCallback(() => {
+    const state = useGameStore.getState();
+    const integrity = Math.floor(state.systemIntegrity);
+    const modules = state.modules;
+    const unlocked = Object.values(modules).filter((m) => m.unlocked).length;
+    const total = Object.keys(modules).length;
+
+    addOutput([
+      { text: '=== SYSTEM STATUS ===', color: Colors.textCyan },
+      { text: `INTEGRITY: ${integrity}%`, color: integrity > 75 ? Colors.textCyan : integrity > 50 ? Colors.textAmber : integrity > 25 ? Colors.textRed : Colors.purple },
+      { text: `STATE: ${state.gameState.toUpperCase()}`, color: integrity > 75 ? Colors.textCyan : integrity > 50 ? Colors.textAmber : Colors.textRed },
+      { text: `OPERATOR: ${state.operatorName} [${state.operatorClass}]`, color: Colors.textPrimary },
+      { text: `LEVEL: ${state.level}  XP: ${state.xp}`, color: Colors.textCyan },
+      { text: `MODULES: ${unlocked}/${total} UNLOCKED`, color: Colors.textAmber },
+      { text: `MISSIONS: ${state.totalMissionsCompleted} COMPLETED  ${state.totalMissionsFailed} FAILED`, color: Colors.textPrimary },
+      { text: `STREAK: ${state.consecutiveSuccesses} SUCCESS  ${state.consecutiveFailures} FAIL`, color: state.consecutiveSuccesses >= 3 ? Colors.textCyan : Colors.textDim },
+      { text: `SESSION: #${state.sessionId}`, color: Colors.textDim },
+    ]);
+  }, []);
+
+  // log — show recent system events (Module 13)
+  const handleLog = useCallback((args: string[]) => {
+    const state = useGameStore.getState();
+    const count = args[0] ? Math.min(parseInt(args[0]) || 5, 20) : 5;
+    const events = state.eventLog.slice(0, count);
+
+    if (events.length === 0) {
+      addOutput([{ text: 'NO EVENTS RECORDED.', color: Colors.textDim }]);
+      return;
+    }
+
+    const lines: OutputLine[] = [
+      { text: `=== LAST ${events.length} EVENTS ===`, color: Colors.textCyan },
+    ];
+
+    for (const event of events) {
+      const date = new Date(event.timestamp);
+      const time = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      const color = SEVERITY_COLORS[event.severity];
+      lines.push({ text: `[${time}] ${event.title}`, color });
+      lines.push({ text: `  ${event.message.substring(0, 80)}${event.message.length > 80 ? '...' : ''}`, color: Colors.textDim });
+    }
+
+    addOutput(lines);
+  }, []);
+
+  // whoami — show operator info (Module 13)
+  const handleWhoami = useCallback(() => {
+    const state = useGameStore.getState();
+    const { getClassTitle } = require('../constants/progression');
+    const classTitle = getClassTitle(state.operatorClass, state.level);
+
+    addOutput([
+      { text: `OPERATOR: ${state.operatorName}`, color: Colors.textCyan },
+      { text: `CLASS: ${state.operatorClass}`, color: Colors.textAmber },
+      { text: `TITLE: ${classTitle}`, color: Colors.textCyan },
+      { text: `LEVEL: ${state.level}`, color: Colors.textPrimary },
+      { text: `XP: ${state.xp}`, color: Colors.textPrimary },
+      { text: `ACHIEVEMENTS: ${state.unlockedAchievements.length}`, color: Colors.textAmber },
+    ]);
+  }, []);
+
+  // scan — scan system modules (Module 13)
+  const handleScan = useCallback(() => {
+    const state = useGameStore.getState();
+    const modules = state.modules;
+
+    const lines: OutputLine[] = [
+      { text: '=== MODULE SCAN ===', color: Colors.textCyan },
+    ];
+
+    for (const [id, mod] of Object.entries(modules)) {
+      const status = !mod.unlocked ? 'LOCKED' : mod.stable ? 'STABLE' : `${Math.floor(mod.integrity)}%`;
+      const color = !mod.unlocked ? Colors.textDim : mod.stable ? '#50FA7B' : mod.integrity > 50 ? Colors.textCyan : Colors.textRed;
+      lines.push({ text: `  ${id.padEnd(15)} ${status.padEnd(8)} ${mod.missionsCompleted}/${mod.totalMissions}`, color });
+    }
+
+    addOutput(lines);
+  }, []);
+
+  // uptime — show session info (Module 13)
+  const handleUptime = useCallback(() => {
+    const state = useGameStore.getState();
+    const now = Date.now();
+
+    addOutput([
+      { text: `SESSION: #${state.sessionId}`, color: Colors.textCyan },
+      { text: `TOTAL MISSIONS: ${state.totalMissionsCompleted + state.totalMissionsFailed}`, color: Colors.textPrimary },
+      { text: `SUCCESS RATE: ${state.totalMissionsCompleted + state.totalMissionsFailed > 0 ? Math.floor(state.totalMissionsCompleted / (state.totalMissionsCompleted + state.totalMissionsFailed) * 100) : 0}%`, color: Colors.textAmber },
+      { text: `FILES REVEALED: ${state.revealedFiles.length}`, color: Colors.textDim },
+      { text: `RESTORE POINTS: ${state.restorePoints.length}`, color: Colors.textDim },
+    ]);
   }, []);
 
   // Handle command submission

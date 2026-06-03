@@ -1,9 +1,9 @@
-// IGNYX Shell Hub — Module 03 + Module 07 + Module 08 + Module 10 + Module 12
+// IGNYX Shell Hub — Module 03 + 07 + 08 + 10 + 12 + 13
 // The operator's command center. System status. Module navigation. Mission access.
 // The circuit hum breathes here. The system lives here.
-// Achievements earned. Trophies claimed.
+// Achievements earned. Trophies claimed. Events logged.
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { ShellLayout } from '../components/ShellLayout';
 import { GlassPanel } from '../components/GlassPanel';
@@ -15,6 +15,8 @@ import { getNextMission } from '../constants/missions';
 import { playAlert } from '../services/AudioEngine';
 import { useSystemDegradation } from '../hooks/useSystemDegradation';
 import { useAchievements } from '../hooks/useAchievements';
+import { useOSEvents } from '../hooks/useOSEvents';
+import { EventLog } from '../components/EventLog';
 import { useRouter } from 'expo-router';
 
 const MODULE_ORDER: ModuleId[] = ['kernel_core', 'app_layer', 'network', 'data_system', 'security', 'ai_core'];
@@ -44,10 +46,28 @@ export default function ShellScreen() {
   // Achievement tracking (Module 12)
   const { unlockedCount, totalCount, checkAndUnlock } = useAchievements();
 
+  // OS Events (Module 13)
+  const { fireSessionStart, checkAmbientEvents } = useOSEvents();
+  const hasSessionStarted = useRef(false);
+
   // Check achievements on shell mount — catches session-based and state-based achievements
   useEffect(() => {
     checkAndUnlock();
+
+    // Fire session start event once
+    if (!hasSessionStarted.current) {
+      hasSessionStarted.current = true;
+      fireSessionStart();
+    }
   }, []);
+
+  // Ambient event checker — runs every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkAmbientEvents();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [checkAmbientEvents]);
 
   // Note: AudioEngine component in ShellLayout auto-syncs ambient to game state
 
@@ -257,6 +277,13 @@ export default function ShellScreen() {
             </GlassPanel>
           </TouchableOpacity>
         </View>
+
+        {/* ── System Log (Module 13) ── */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>SYSTEM LOG</Text>
+        </View>
+
+        <EventLog maxEvents={5} compact />
       </ScrollView>
     </ShellLayout>
   );

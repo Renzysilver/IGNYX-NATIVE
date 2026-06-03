@@ -1,6 +1,6 @@
-// IGNYX Game Store — Module 10 + Module 11 + Module 12
+// IGNYX Game Store — Module 10 + Module 11 + Module 12 + Module 13
 // Full state persistence. Revealed files. System degradation. Restore points.
-// XP progression. Level milestones. Achievements. The system never forgets. The operator evolves.
+// XP progression. Level milestones. Achievements. OS Events. The system never forgets. The operator evolves.
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,7 @@ import type { GameState, OperatorClass, ModuleId, ModuleState } from '../constan
 import { MODULE_NAMES } from '../constants/gameState';
 import { getLevelFromXP, getRestorePointCost, getXPProgress } from '../constants/progression';
 import type { XPBreakdown } from '../constants/progression';
+import type { OSEvent } from '../constants/osEvents';
 
 // ─── Sub-Types ────────────────────────────────────────────────
 
@@ -69,6 +70,10 @@ interface GameStore {
   lastSpeedBonus: boolean;        // Was last mission completed with speed bonus?
   lastStreakBonus: boolean;       // Was last mission completed with streak bonus?
 
+  // OS Events (Module 13)
+  eventLog: OSEvent[];            // Persistent event log (last 50 events)
+  lastEventTimestamp: number;     // Timestamp of last event (for ambient cooldown)
+
   // Boot
   hasBooted: boolean;
   hasProfiled: boolean;
@@ -119,6 +124,10 @@ interface GameStore {
   clearPendingAchievements: () => void;
   setLastSpeedBonus: (active: boolean) => void;
   setLastStreakBonus: (active: boolean) => void;
+  // OS Events (Module 13)
+  addEvent: (event: OSEvent) => void;
+  clearEventLog: () => void;
+  getRecentEvents: (count: number) => OSEvent[];
   resetGame: () => void;
   persistState: () => Promise<void>;
   hydrateState: () => Promise<void>;
@@ -220,6 +229,7 @@ const serializeState = (state: GameStore): string => {
     'revealFile', 'isFileRevealed', 'clearPendingLevelUp', 'resetGame', 'persistState', 'hydrateState',
     'setHasHydrated',
     'unlockAchievement', 'clearPendingAchievements', 'setLastSpeedBonus', 'setLastStreakBonus',
+    'addEvent', 'clearEventLog', 'getRecentEvents',
   ]);
 
   for (const key of Object.keys(state)) {
@@ -256,6 +266,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   pendingAchievements: [],
   lastSpeedBonus: false,
   lastStreakBonus: false,
+  eventLog: [],
+  lastEventTimestamp: 0,
   hasBooted: false,
   hasProfiled: false,
   reducedMotion: false,
@@ -536,6 +548,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setLastStreakBonus: (active: boolean) => set({ lastStreakBonus: active }),
 
+  // ── OS Events (Module 13) ───────────────────────────────
+
+  addEvent: (event: OSEvent) => {
+    const state = get();
+    const maxLogSize = 50;
+    const newLog = [event, ...state.eventLog].slice(0, maxLogSize);
+    set({ eventLog: newLog, lastEventTimestamp: event.timestamp });
+  },
+
+  clearEventLog: () => set({ eventLog: [], lastEventTimestamp: 0 }),
+
+  getRecentEvents: (count: number): OSEvent[] => {
+    return get().eventLog.slice(0, count);
+  },
+
   // ── Nuclear Reset ────────────────────────────────────────
 
   resetGame: () => {
@@ -562,6 +589,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pendingAchievements: [],
       lastSpeedBonus: false,
       lastStreakBonus: false,
+      eventLog: [],
+      lastEventTimestamp: 0,
       hasBooted: false,
       hasProfiled: false,
     });
@@ -614,6 +643,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pendingAchievements: [], // Always reset pending on hydration
         lastSpeedBonus: parsed.lastSpeedBonus ?? false,
         lastStreakBonus: parsed.lastStreakBonus ?? false,
+        eventLog: parsed.eventLog ?? [],
+        lastEventTimestamp: parsed.lastEventTimestamp ?? 0,
         hasBooted: parsed.hasBooted ?? false,
         hasProfiled: parsed.hasProfiled ?? false,
         reducedMotion: parsed.reducedMotion ?? false,

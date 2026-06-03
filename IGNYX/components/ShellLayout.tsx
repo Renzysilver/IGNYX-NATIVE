@@ -5,23 +5,25 @@ import { AlertOverlay, AlertOverlayManager } from '../components/AlertOverlay';
 import { SystemStatusRing } from '../components/SystemStatusRing';
 import { PlayerHUD } from '../components/PlayerHUD';
 import { AchievementToast } from '../components/AchievementToast';
+import { AmbientOverlay } from '../components/AmbientOverlay';
 import { AudioEngine } from '../components/AudioEngine';
 import { Colors } from '../constants/colors';
 
 /**
- * ShellLayout — The 6-layer Glass Neural OS wrapper.
+ * ShellLayout — The 8-layer Glass Neural OS wrapper.
  * Every screen after boot/profiling lives inside this shell.
  * It must feel alive at all times.
  *
  * Layers (z-ordered bottom to top):
  * 0. Audio Engine (invisible — syncs game state to sound)
  * 1. Circuit Background (Skia animated nodes)
- * 2. Readability overlay (subtle darkening)
- * 3. System Status Ring (top bar)
- * 4. Screen content (injected via children)
- * 5. Alert Overlay (over everything, never blocks editor)
+ * 2. Ambient Overlay (scanlines, tint, vignette — Module 13)
+ * 3. Readability overlay (subtle darkening)
+ * 4. System Status Ring (top bar)
+ * 5. Screen content (injected via children)
  * 6. Player HUD (bottom corners)
- * 7. Achievement Toast (top notifications for unlocked achievements)
+ * 7. Alert Overlay (over everything, never blocks editor)
+ * 8. Achievement Toast (top notifications for unlocked achievements)
  */
 interface ShellLayoutProps {
   children: React.ReactNode;
@@ -38,7 +40,10 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({ children, darkMode = f
       {/* LAYER 1 — Circuit Background */}
       <CircuitBackground />
 
-      {/* LAYER 2 — Readability overlay */}
+      {/* LAYER 2 — Ambient Overlay (Module 13 — scanlines, tint, vignette) */}
+      <AmbientOverlay />
+
+      {/* LAYER 3 — Readability overlay */}
       <View style={[
         styles.readabilityOverlay,
         darkMode && styles.readabilityOverlayDark,
@@ -74,7 +79,7 @@ const styles = StyleSheet.create({
   readabilityOverlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.15)',
-    zIndex: 1,
+    zIndex: 3,
   },
   readabilityOverlayDark: {
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
