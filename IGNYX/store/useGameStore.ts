@@ -50,6 +50,10 @@ interface GameStore {
   fontSize: 'small' | 'medium' | 'large';
   osVoiceText: boolean;
 
+  // Sound
+  soundEnabled: boolean;
+  masterVolume: number;
+
   // Actions
   setOperatorName: (name: string) => void;
   setOperatorClass: (cls: OperatorClass) => void;
@@ -65,6 +69,8 @@ interface GameStore {
   setBooted: (booted: boolean) => void;
   setProfiled: (profiled: boolean) => void;
   setAccessibility: (key: string, value: boolean | string) => void;
+  setSoundEnabled: (enabled: boolean) => void;
+  setMasterVolume: (volume: number) => void;
   resetConsecutiveSuccesses: () => void;
   incrementConsecutiveSuccesses: () => void;
   startMission: (missionId: string, moduleId: ModuleId) => void;
@@ -159,6 +165,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   highContrast: false,
   fontSize: 'medium',
   osVoiceText: false,
+  soundEnabled: true,
+  masterVolume: 0.7,
 
   setOperatorName: (name) => set({ operatorName: name }),
   setOperatorClass: (cls) => set({ operatorClass: cls }),
@@ -284,6 +292,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     else if (key === 'fontSize') set({ fontSize: value as 'small' | 'medium' | 'large' });
     else if (key === 'osVoiceText') set({ osVoiceText: value as boolean });
   },
+
+  setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
+  setMasterVolume: (volume) => set({ masterVolume: Math.max(0, Math.min(1, volume)) }),
 
   resetConsecutiveSuccesses: () => set({ consecutiveSuccesses: 0 }),
   incrementConsecutiveSuccesses: () =>

@@ -35,6 +35,17 @@ import {
 } from '../constants/missions';
 import type { ModuleId } from '../constants/gameState';
 import { useRouter } from 'expo-router';
+import {
+  updateAmbient,
+  playSuccess,
+  playFail,
+  playGlitchShort,
+  playGlitchLong,
+  playTimerWarning,
+  playAlert,
+  pauseAmbientForEditor,
+  resumeAmbientFromEditor,
+} from '../services/AudioEngine';
 
 type MissionStage = 'alert' | 'active' | 'success' | 'fail' | 'timeout';
 
@@ -48,6 +59,7 @@ export default function MissionScreen() {
   const failMissionStore = useGameStore((s) => s.failMission);
   const degradeIntegrity = useGameStore((s) => s.degradeIntegrity);
   const checkRestorePoints = useGameStore((s) => s.checkRestorePoints);
+  const gameState = useGameStore((s) => s.gameState);
 
   const [stage, setStage] = useState<MissionStage>('alert');
   const [mission, setMission] = useState<Mission | null>(null);
@@ -111,9 +123,12 @@ export default function MissionScreen() {
         () => {
           setStage('active');
           startMission(nextMission.id, mId);
+          // Start ambient for current game state
+          updateAmbient(gameState);
         },
       );
     }, 500);
+    playAlert();
   }, []);
 
   // ── Timer countdown ──────────────────────────────────────────
@@ -136,6 +151,7 @@ export default function MissionScreen() {
             Colors.textAmber,
             2000,
           );
+          playTimerWarning();
         }
         if (prev === 11) {
           AlertOverlayManager.show(
@@ -143,6 +159,7 @@ export default function MissionScreen() {
             Colors.textRed,
             1500,
           );
+          playTimerWarning();
         }
 
         return prev - 1;
@@ -212,6 +229,7 @@ export default function MissionScreen() {
       completeMission(mission.moduleId);
       checkRestorePoints();
       Vibration.vibrate([30, 50, 30]);
+      playSuccess();
 
       setTimeout(() => {
         router.replace('/shell');
@@ -225,6 +243,8 @@ export default function MissionScreen() {
       setShowGlitch(true);
       setGlitchIntensity('medium');
       Vibration.vibrate([100, 50, 100]);
+      playGlitchShort();
+      playFail();
 
       setTimeout(() => {
         setShowGlitch(false);
@@ -251,6 +271,8 @@ export default function MissionScreen() {
     setShowGlitch(true);
     setGlitchIntensity('high');
     Vibration.vibrate([200, 100, 200, 100, 200]);
+    playGlitchLong();
+    playFail();
 
     setTimeout(() => {
       setShowGlitch(false);
