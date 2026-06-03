@@ -1,7 +1,13 @@
+// IGNYX Game Store — Module 10
+// Full state persistence. Revealed files. System degradation. Restore points.
+// Every choice survives. Every session continues. The system never forgets.
+
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameState, OperatorClass, ModuleId, ModuleState } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
+
+// ─── Sub-Types ────────────────────────────────────────────────
 
 interface ActiveMission {
   missionId: string;
@@ -15,6 +21,12 @@ interface RestorePoint {
   xp: number;
   modules: Record<ModuleId, ModuleState>;
 }
+
+// ─── Persistence Keys ─────────────────────────────────────────
+
+const STORAGE_KEY = 'ignyx_game_state';
+
+// ─── Store Interface ──────────────────────────────────────────
 
 interface GameStore {
   // Operator
@@ -35,6 +47,9 @@ interface GameStore {
   activeMission: ActiveMission | null;
   restorePoints: RestorePoint[];
 
+  // Revealed files — paths unlocked by mission success
+  revealedFiles: string[];
+
   // Session
   sessionId: number;
   consecutiveSuccesses: number;
@@ -53,6 +68,10 @@ interface GameStore {
   // Sound
   soundEnabled: boolean;
   masterVolume: number;
+
+  // Persistence
+  hasHydrated: boolean;
+  setHasHydrated: (hydrated: boolean) => void;
 
   // Actions
   setOperatorName: (name: string) => void;
@@ -77,9 +96,14 @@ interface GameStore {
   endMission: () => void;
   checkRestorePoints: () => void;
   loadRestorePoint: (index: number) => void;
-  saveRestorePoints: () => Promise<void>;
-  loadRestorePoints: () => Promise<void>;
+  revealFile: (filePath: string) => void;
+  isFileRevealed: (filePath: string) => boolean;
+  resetGame: () => void;
+  persistState: () => Promise<void>;
+  hydrateState: () => Promise<void>;
 }
+
+// ─── Initial Module State ─────────────────────────────────────
 
 const createInitialModules = (): Record<ModuleId, ModuleState> => ({
   kernel_core: {
@@ -138,12 +162,52 @@ const createInitialModules = (): Record<ModuleId, ModuleState> => ({
   },
 });
 
+// ─── Helpers ──────────────────────────────────────────────────
+
 const getGameStateFromIntegrity = (integrity: number): GameState => {
   if (integrity > 75) return 'normal';
   if (integrity > 50) return 'warning';
   if (integrity > 25) return 'critical';
   return 'breakdown';
 };
+
+/**
+ * Fields that should NOT be persisted across sessions.
+ * Transient state resets on every app launch.
+ */
+const TRANSIENT_FIELDS: (keyof GameStore)[] = [
+  'isEditorFocused',
+  'activeMission',
+  'hasHydrated',
+];
+
+/**
+ * Serialize the current state for AsyncStorage.
+ * Strips transient fields and action functions.
+ */
+const serializeState = (state: GameStore): string => {
+  const serializable: Record<string, unknown> = {};
+  const actionKeys = new Set<string>([
+    'setOperatorName', 'setOperatorClass', 'addXP', 'setSystemIntegrity',
+    'degradeIntegrity', 'restoreIntegrity', 'setGameState', 'setEditorFocused',
+    'completeMission', 'failMission', 'unlockModule', 'setBooted', 'setProfiled',
+    'setAccessibility', 'setSoundEnabled', 'setMasterVolume',
+    'resetConsecutiveSuccesses', 'incrementConsecutiveSuccesses',
+    'startMission', 'endMission', 'checkRestorePoints', 'loadRestorePoint',
+    'revealFile', 'isFileRevealed', 'resetGame', 'persistState', 'hydrateState',
+    'setHasHydrated',
+  ]);
+
+  for (const key of Object.keys(state)) {
+    if (actionKeys.has(key)) continue;
+    if (TRANSIENT_FIELDS.includes(key as keyof GameStore)) continue;
+    serializable[key] = state[key as keyof GameStore];
+  }
+
+  return JSON.stringify(serializable);
+};
+
+// ─── Create Store ─────────────────────────────────────────────
 
 export const useGameStore = create<GameStore>((set, get) => ({
   operatorName: '',
@@ -156,6 +220,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   modules: createInitialModules(),
   activeMission: null,
   restorePoints: [],
+  revealedFiles: [],
   sessionId: 1,
   consecutiveSuccesses: 0,
   consecutiveFailures: 0,
@@ -167,6 +232,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   osVoiceText: false,
   soundEnabled: true,
   masterVolume: 0.7,
+  hasHydrated: false,
+
+  setHasHydrated: (hydrated: boolean) => set({ hasHydrated: hydrated }),
+
+  // ── Operator ──────────────────────────────────────────────
 
   setOperatorName: (name) => set({ operatorName: name }),
   setOperatorClass: (cls) => set({ operatorClass: cls }),
@@ -177,6 +247,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newLevel = Math.floor(newXP / 500) + 1;
     set({ xp: newXP, level: newLevel });
   },
+
+  // ── System Integrity ─────────────────────────────────────
 
   setSystemIntegrity: (value) => {
     const clamped = Math.max(0, Math.min(100, value));
@@ -198,6 +270,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setGameState: (gameState) => set({ gameState }),
   setEditorFocused: (focused) => set({ isEditorFocused: focused }),
 
+  // ── Mission Completion ───────────────────────────────────
+
   completeMission: (moduleId) => {
     const state = get();
     const module = state.modules[moduleId];
@@ -215,7 +289,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
     };
 
-    // Unlock logic
+    // Unlock logic — module progression chain
     if (moduleId === 'kernel_core' && newCompleted >= 2) {
       newModules.app_layer = { ...newModules.app_layer, unlocked: true };
     }
@@ -236,6 +310,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newXP = state.xp + xpGain;
     const newLevel = Math.floor(newXP / 500) + 1;
 
+    const restoredIntegrity = Math.min(100, state.systemIntegrity + 5);
+
     set({
       modules: newModules,
       xp: newXP,
@@ -243,11 +319,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       consecutiveSuccesses: state.consecutiveSuccesses + 1,
       consecutiveFailures: 0,
       activeMission: null,
+      systemIntegrity: restoredIntegrity,
+      gameState: getGameStateFromIntegrity(restoredIntegrity),
     });
-
-    // Restore integrity on success
-    const restoredIntegrity = Math.min(100, state.systemIntegrity + 5);
-    set({ systemIntegrity: restoredIntegrity, gameState: getGameStateFromIntegrity(restoredIntegrity) });
   },
 
   failMission: (moduleId) => {
@@ -283,8 +357,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
+  // ── Boot ─────────────────────────────────────────────────
+
   setBooted: (booted) => set({ hasBooted: booted }),
   setProfiled: (profiled) => set({ hasProfiled: profiled }),
+
+  // ── Accessibility ────────────────────────────────────────
 
   setAccessibility: (key, value) => {
     if (key === 'reducedMotion') set({ reducedMotion: value as boolean });
@@ -293,12 +371,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     else if (key === 'osVoiceText') set({ osVoiceText: value as boolean });
   },
 
+  // ── Sound ────────────────────────────────────────────────
+
   setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
   setMasterVolume: (volume) => set({ masterVolume: Math.max(0, Math.min(1, volume)) }),
+
+  // ── Streaks ──────────────────────────────────────────────
 
   resetConsecutiveSuccesses: () => set({ consecutiveSuccesses: 0 }),
   incrementConsecutiveSuccesses: () =>
     set((s) => ({ consecutiveSuccesses: s.consecutiveSuccesses + 1 })),
+
+  // ── Mission Lifecycle ────────────────────────────────────
 
   startMission: (missionId, moduleId) => {
     set({
@@ -314,12 +398,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ activeMission: null });
   },
 
+  // ── Restore Points ───────────────────────────────────────
+
   checkRestorePoints: () => {
     const state = get();
     const integrity = state.systemIntegrity;
     const points = [...state.restorePoints];
 
-    // Create restore points at 75%, 50%, 25%
+    // Create restore points at 75%, 50%, 25% thresholds
     const thresholds = [75, 50, 25];
     for (const threshold of thresholds) {
       const alreadyExists = points.some((p) => p.integrity === threshold);
@@ -341,10 +427,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const point = state.restorePoints[index];
     if (!point) return;
 
-    // Apply restore point with debuffs
+    // Apply restore point with -15% integrity debuff to all modules
     const debuffedModules = JSON.parse(JSON.stringify(point.modules)) as Record<ModuleId, ModuleState>;
-
-    // Apply -15% integrity debuff to adjacent modules
     for (const key of Object.keys(debuffedModules) as ModuleId[]) {
       debuffedModules[key].integrity = Math.max(0, debuffedModules[key].integrity - 15);
     }
@@ -357,27 +441,122 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  saveRestorePoints: async () => {
+  // ── Revealed Files ───────────────────────────────────────
+
+  revealFile: (filePath: string) => {
     const state = get();
+    if (state.revealedFiles.includes(filePath)) return;
+    set({ revealedFiles: [...state.revealedFiles, filePath] });
+  },
+
+  isFileRevealed: (filePath: string): boolean => {
+    return get().revealedFiles.includes(filePath);
+  },
+
+  // ── Nuclear Reset ────────────────────────────────────────
+
+  resetGame: () => {
+    set({
+      operatorName: '',
+      operatorClass: 'UNKNOWN',
+      xp: 0,
+      level: 1,
+      systemIntegrity: 100,
+      gameState: 'normal',
+      isEditorFocused: false,
+      modules: createInitialModules(),
+      activeMission: null,
+      restorePoints: [],
+      revealedFiles: [],
+      sessionId: 1,
+      consecutiveSuccesses: 0,
+      consecutiveFailures: 0,
+      hasBooted: false,
+      hasProfiled: false,
+    });
+
+    // Clear persisted data
+    AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+  },
+
+  // ── Persistence ──────────────────────────────────────────
+
+  persistState: async () => {
     try {
-      await AsyncStorage.setItem(
-        'ignyx_restore_points',
-        JSON.stringify(state.restorePoints)
-      );
+      const state = get();
+      const serialized = serializeState(state);
+      await AsyncStorage.setItem(STORAGE_KEY, serialized);
     } catch (e) {
-      // Silent fail — restore points are nice-to-have
+      // Silent fail — persistence is best-effort
     }
   },
 
-  loadRestorePoints: async () => {
+  hydrateState: async () => {
     try {
-      const stored = await AsyncStorage.getItem('ignyx_restore_points');
-      if (stored) {
-        const points = JSON.parse(stored) as RestorePoint[];
-        set({ restorePoints: points });
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (!stored) {
+        set({ hasHydrated: true });
+        return;
       }
+
+      const parsed = JSON.parse(stored);
+
+      // Merge stored data with current defaults (handles schema migrations)
+      set({
+        operatorName: parsed.operatorName ?? '',
+        operatorClass: parsed.operatorClass ?? 'UNKNOWN',
+        xp: parsed.xp ?? 0,
+        level: parsed.level ?? 1,
+        systemIntegrity: parsed.systemIntegrity ?? 100,
+        gameState: parsed.gameState ?? 'normal',
+        modules: parsed.modules ?? createInitialModules(),
+        restorePoints: parsed.restorePoints ?? [],
+        revealedFiles: parsed.revealedFiles ?? [],
+        sessionId: (parsed.sessionId ?? 1) + 1, // Increment session on each launch
+        consecutiveSuccesses: 0, // Reset streaks on new session
+        consecutiveFailures: 0,
+        hasBooted: parsed.hasBooted ?? false,
+        hasProfiled: parsed.hasProfiled ?? false,
+        reducedMotion: parsed.reducedMotion ?? false,
+        highContrast: parsed.highContrast ?? false,
+        fontSize: parsed.fontSize ?? 'medium',
+        osVoiceText: parsed.osVoiceText ?? false,
+        soundEnabled: parsed.soundEnabled ?? true,
+        masterVolume: parsed.masterVolume ?? 0.7,
+        hasHydrated: true,
+      });
     } catch (e) {
-      // Silent fail
+      // If hydration fails, start fresh
+      set({ hasHydrated: true });
     }
   },
 }));
+
+// ─── Auto-Persist Subscriber ──────────────────────────────────
+// Whenever state changes (excluding transient fields), persist to AsyncStorage.
+// Throttled to avoid excessive writes during rapid updates (e.g. timer ticks).
+
+let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+const PERSIST_THROTTLE_MS = 2000; // 2-second debounce
+
+useGameStore.subscribe((state, prevState) => {
+  // Skip if not yet hydrated
+  if (!state.hasHydrated) return;
+
+  // Skip if only transient fields changed
+  const transientKeys = new Set<string>([
+    'isEditorFocused', 'activeMission', 'hasHydrated',
+  ]);
+
+  const changedKeys = Object.keys(state).filter(
+    (key) => !transientKeys.has(key) && state[key as keyof GameStore] !== prevState[key as keyof GameStore]
+  );
+
+  if (changedKeys.length === 0) return;
+
+  // Throttled persist
+  if (persistTimeout) clearTimeout(persistTimeout);
+  persistTimeout = setTimeout(() => {
+    useGameStore.getState().persistState();
+  }, PERSIST_THROTTLE_MS);
+});

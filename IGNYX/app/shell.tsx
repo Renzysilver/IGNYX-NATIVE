@@ -1,4 +1,4 @@
-// IGNYX Shell Hub — Module 03 + Module 07 + Module 08
+// IGNYX Shell Hub — Module 03 + Module 07 + Module 08 + Module 10
 // The operator's command center. System status. Module navigation. Mission access.
 // The circuit hum breathes here. The system lives here.
 
@@ -12,6 +12,7 @@ import type { ModuleId } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
 import { getNextMission } from '../constants/missions';
 import { playAlert } from '../services/AudioEngine';
+import { useSystemDegradation } from '../hooks/useSystemDegradation';
 import { useRouter } from 'expo-router';
 
 const MODULE_ORDER: ModuleId[] = ['kernel_core', 'app_layer', 'network', 'data_system', 'security', 'ai_core'];
@@ -34,6 +35,9 @@ export default function ShellScreen() {
   const operatorClass = useGameStore((s) => s.operatorClass);
   const xp = useGameStore((s) => s.xp);
   const level = useGameStore((s) => s.level);
+
+  // System degradation — the system decays while the operator hesitates
+  useSystemDegradation();
 
   // Note: AudioEngine component in ShellLayout auto-syncs ambient to game state
 
@@ -59,6 +63,11 @@ export default function ShellScreen() {
   // Handle filesystem tap
   const handleFilesystemPress = useCallback(() => {
     router.push('/filesystem');
+  }, [router]);
+
+  // Handle settings tap
+  const handleSettingsPress = useCallback(() => {
+    router.push('/settings');
   }, [router]);
 
   // Get integrity bar color
@@ -205,6 +214,18 @@ export default function ShellScreen() {
             <GlassPanel active style={styles.toolPanel}>
               <Text style={styles.toolIcon}>{'[FS]'}</Text>
               <Text style={styles.toolLabel}>FILES</Text>
+            </GlassPanel>
+          </TouchableOpacity>
+
+          {/* Settings */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleSettingsPress}
+            style={styles.toolButton}
+          >
+            <GlassPanel active style={styles.toolPanel}>
+              <Text style={styles.toolIcon}>{'[CF]'}</Text>
+              <Text style={styles.toolLabel}>CONFIG</Text>
             </GlassPanel>
           </TouchableOpacity>
         </View>

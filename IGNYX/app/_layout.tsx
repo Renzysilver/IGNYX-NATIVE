@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="terminal" />
         <Stack.Screen name="filesystem" />
         <Stack.Screen name="mission" />
+        <Stack.Screen name="settings" />
       </Stack>
     </>
   );

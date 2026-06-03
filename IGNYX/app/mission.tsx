@@ -70,6 +70,8 @@ export default function MissionScreen() {
   const addXP = useGameStore((s) => s.addXP);
   const checkRestorePoints = useGameStore((s) => s.checkRestorePoints);
   const systemIntegrity = useGameStore((s) => s.systemIntegrity);
+  const revealFile = useGameStore((s) => s.revealFile);
+  const osVoiceText = useGameStore((s) => s.osVoiceText);
 
   // Mission state
   const [stage, setStage] = useState<MissionStage>('briefing');
@@ -273,6 +275,11 @@ export default function MissionScreen() {
       completeMission(moduleId);
       checkRestorePoints();
 
+      // Reveal hidden file if mission has one
+      if (mission.revealsFile) {
+        revealFile(mission.revealsFile);
+      }
+
       // Calculate what happened
       const postIntegrity = useGameStore.getState().systemIntegrity;
       const delta = postIntegrity - preIntegrity;
@@ -360,7 +367,7 @@ export default function MissionScreen() {
         setStage('result');
       }
     }
-  }, [mission, code, stage, moduleId, completeMission, failMissionStore, checkRestorePoints, systemIntegrity, modules]);
+  }, [mission, code, stage, moduleId, completeMission, failMissionStore, checkRestorePoints, systemIntegrity, modules, revealFile]);
 
   // ── Handle timeout ───────────────────────────────────────────
 
@@ -434,6 +441,10 @@ export default function MissionScreen() {
         <View style={styles.container}>
           <View style={styles.alertWaitContainer}>
             <Text style={styles.alertWaitText}>INITIALIZING MISSION...</Text>
+            {/* OS Voice Line — narrative text shown when osVoiceText is enabled */}
+            {osVoiceText && mission.osVoiceLine && (
+              <Text style={styles.osVoiceText}>{mission.osVoiceLine}</Text>
+            )}
           </View>
         </View>
       )}
@@ -538,6 +549,15 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceMono-Regular',
     color: Colors.textAmber,
     letterSpacing: 4,
+  },
+  osVoiceText: {
+    fontSize: 10,
+    fontFamily: 'SpaceMono-Regular',
+    color: Colors.textCyan,
+    letterSpacing: 2,
+    marginTop: 16,
+    textAlign: 'center',
+    opacity: 0.8,
   },
 
   // Top bar

@@ -7,6 +7,7 @@ import { View, ScrollView, StyleSheet } from 'react-native';
 import { FILESYSTEM, type FSNode } from '../constants/filesystem';
 import { FileTreeItem } from './FileTreeItem';
 import { Colors } from '../constants/colors';
+import { useGameStore } from '../store/useGameStore';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -38,12 +39,21 @@ export const FileTreeView: React.FC<FileTreeViewProps> = memo(({
   onItemPress,
   showHidden,
 }) => {
+  // Get revealed files from the store — hidden files become visible when revealed
+  const revealedFiles = useGameStore((s) => s.revealedFiles);
+
   // Get sorted children — directories first, then files, alphabetically within each group
   const sortedChildren = useCallback((children: Record<string, FSNode>): [string, FSNode][] => {
     const entries = Object.entries(children);
 
-    // Filter out hidden items unless showHidden
-    const visible = entries.filter(([, child]) => showHidden || !child.hidden);
+    // Filter out hidden items unless showHidden OR the file has been revealed via mission success
+    const visible = entries.filter(([, child]) => {
+      if (!child.hidden) return true;
+      if (showHidden) return true;
+      // Check if this hidden file has been revealed
+      const fullPath = '/' + [...path, child.name].join('/');
+      return revealedFiles.includes(fullPath);
+    });
 
     // Sort: directories first, then alphabetically
     return visible.sort(([, a], [, b]) => {
@@ -51,7 +61,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = memo(({
       if (a.type !== 'directory' && b.type === 'directory') return 1;
       return a.name.localeCompare(b.name);
     });
-  }, [showHidden]);
+  }, [showHidden, revealedFiles, path]);
 
   // Don't render if this is a file (files are leaf nodes)
   if (node.type !== 'directory' || !node.children) return null;
