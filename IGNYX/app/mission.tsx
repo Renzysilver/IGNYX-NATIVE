@@ -1,7 +1,7 @@
-// IGNYX Mission Screen — Module 05 + 06 + 09
+// IGNYX Mission Screen — Module 05 + 06 + 09 + 11
 // The operator's crucible. Broken code. A countdown. No second chances.
 // Full mission flow: BRIEFING → ALERT → ACTIVE → RESULT
-// Every mission is a repair. Every repair has consequences.
+// Every mission is a repair. Every repair has consequences. Every XP gain is earned.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -25,6 +25,7 @@ import { ShellLayout } from '../components/ShellLayout';
 import { GlassPanel } from '../components/GlassPanel';
 import { GlitchOverlay } from '../components/GlitchOverlay';
 import { AlertOverlayManager } from '../components/AlertOverlay';
+import { LevelUpCelebration } from '../components/LevelUpCelebration';
 import { CodeEditor } from '../components/CodeEditor';
 import { MissionBriefing } from '../components/MissionBriefing';
 import { MissionResult, type MissionResultType } from '../components/MissionResult';
@@ -37,6 +38,12 @@ import {
   calculateFailureConsequences,
   type Mission,
 } from '../constants/missions';
+import {
+  calculateXPGain,
+  getMilestonesForLevel,
+  getClassTitle,
+  type XPBreakdown,
+} from '../constants/progression';
 import type { ModuleId } from '../constants/gameState';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -67,11 +74,15 @@ export default function MissionScreen() {
   const failMissionStore = useGameStore((s) => s.failMission);
   const degradeIntegrity = useGameStore((s) => s.degradeIntegrity);
   const restoreIntegrity = useGameStore((s) => s.restoreIntegrity);
-  const addXP = useGameStore((s) => s.addXP);
   const checkRestorePoints = useGameStore((s) => s.checkRestorePoints);
   const systemIntegrity = useGameStore((s) => s.systemIntegrity);
   const revealFile = useGameStore((s) => s.revealFile);
   const osVoiceText = useGameStore((s) => s.osVoiceText);
+  const operatorClass = useGameStore((s) => s.operatorClass);
+  const consecutiveSuccesses = useGameStore((s) => s.consecutiveSuccesses);
+  const level = useGameStore((s) => s.level);
+  const pendingLevelUp = useGameStore((s) => s.pendingLevelUp);
+  const clearPendingLevelUp = useGameStore((s) => s.clearPendingLevelUp);
 
   // Mission state
   const [stage, setStage] = useState<MissionStage>('briefing');
@@ -88,6 +99,12 @@ export default function MissionScreen() {
   const [newSystemIntegrity, setNewSystemIntegrity] = useState(100);
   const [unlockedModule, setUnlockedModule] = useState<ModuleId | null>(null);
   const [moduleStabilized, setModuleStabilized] = useState(false);
+  const [xpBreakdown, setXpBreakdown] = useState<XPBreakdown | null>(null);
+
+  // Level-up celebration state (Module 11)
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const [levelUpLevel, setLevelUpLevel] = useState(1);
+  const [levelUpMilestones, setLevelUpMilestones] = useState<import('../constants/progression').MilestoneReward[]>([]);
 
   // Editor state
   const [errorLines, setErrorLines] = useState<number[]>([]);
@@ -265,14 +282,24 @@ export default function MissionScreen() {
       // ── SUCCESS ──
       if (timerRef.current) clearInterval(timerRef.current);
 
-      // Calculate XP gain
-      const xpReward = mission.xpReward + Math.floor(useGameStore.getState().level * 10);
+      // Calculate XP with progression engine (Module 11)
+      const timeRemainingFraction = mission.timerSeconds > 0
+        ? timeLeft / mission.timerSeconds
+        : 0;
+      const breakdown = calculateXPGain(
+        mission.xpReward,
+        operatorClass,
+        moduleId,
+        consecutiveSuccesses + 1, // +1 because this is about to be the new streak
+        timeRemainingFraction,
+        level,
+      );
 
       // Store the pre-mission integrity for delta calculation
       const preIntegrity = systemIntegrity;
 
-      // Apply success to store
-      completeMission(moduleId);
+      // Apply success to store with XP breakdown
+      completeMission(moduleId, breakdown);
       checkRestorePoints();
 
       // Reveal hidden file if mission has one
@@ -298,18 +325,31 @@ export default function MissionScreen() {
       // Check module stability
       const stabilized = postModules[moduleId].stable && !modules[moduleId].stable;
 
+      // Check for level-up (Module 11)
+      const newPendingLevelUp = useGameStore.getState().pendingLevelUp;
+
       // Set result state
       setResultType('success');
       setFeedbackText(mission.successMessage);
-      setXpGained(xpReward);
+      setXpGained(breakdown.total);
       setIntegrityDelta(delta);
       setNewSystemIntegrity(postIntegrity);
       setUnlockedModule(unlocked);
       setModuleStabilized(stabilized);
+      setXpBreakdown(breakdown);
       setErrorLines([]);
 
       Vibration.vibrate([30, 50, 30]);
       playSuccess();
+
+      // Trigger level-up celebration if level up occurred
+      if (newPendingLevelUp) {
+        const milestones = getMilestonesForLevel(newPendingLevelUp);
+        setLevelUpLevel(newPendingLevelUp);
+        setLevelUpMilestones(milestones);
+        setShowLevelUp(true);
+        clearPendingLevelUp();
+      }
 
       // Transition to result
       setStage('result');
@@ -367,7 +407,7 @@ export default function MissionScreen() {
         setStage('result');
       }
     }
-  }, [mission, code, stage, moduleId, completeMission, failMissionStore, checkRestorePoints, systemIntegrity, modules, revealFile]);
+  }, [mission, code, stage, moduleId, completeMission, failMissionStore, checkRestorePoints, systemIntegrity, modules, revealFile, operatorClass, consecutiveSuccesses, level, clearPendingLevelUp, timeLeft]);
 
   // ── Handle timeout ───────────────────────────────────────────
 
@@ -512,10 +552,20 @@ export default function MissionScreen() {
             newSystemIntegrity={newSystemIntegrity}
             unlockedModule={unlockedModule}
             moduleStabilized={moduleStabilized}
+            xpBreakdown={xpBreakdown}
             onContinue={handleContinue}
           />
         </View>
       )}
+
+      {/* ── Level-Up Celebration (Module 11) ── */}
+      <LevelUpCelebration
+        visible={showLevelUp}
+        level={levelUpLevel}
+        classTitle={getClassTitle(operatorClass, levelUpLevel)}
+        milestones={levelUpMilestones}
+        onComplete={() => setShowLevelUp(false)}
+      />
 
       {/* ── Glitch overlay ── */}
       <GlitchOverlay

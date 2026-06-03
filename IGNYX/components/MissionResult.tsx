@@ -1,7 +1,8 @@
-// IGNYX MissionResult — Module 09
+// IGNYX MissionResult — Module 09 + Module 11
 // The aftermath. The operator sees what they've done — or failed to do.
 // Success is relief. Failure is consequence. Timeout is silence.
 // Every result changes the system. Every change is remembered.
+// XP breakdown shows how every bonus was earned.
 
 import React, { memo, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
@@ -17,6 +18,7 @@ import { Colors } from '../constants/colors';
 import type { Mission } from '../constants/missions';
 import type { ModuleId } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
+import type { XPBreakdown } from '../constants/progression';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -39,6 +41,8 @@ interface MissionResultProps {
   unlockedModule: ModuleId | null;
   /** Whether the module is now stable */
   moduleStabilized: boolean;
+  /** XP breakdown showing bonus details (Module 11) */
+  xpBreakdown?: XPBreakdown | null;
   /** Callback to continue / return to shell */
   onContinue: () => void;
 }
@@ -54,6 +58,7 @@ export const MissionResult: React.FC<MissionResultProps> = memo(({
   newSystemIntegrity,
   unlockedModule,
   moduleStabilized,
+  xpBreakdown,
   onContinue,
 }) => {
   const isSuccess = result === 'success';
@@ -158,6 +163,47 @@ export const MissionResult: React.FC<MissionResultProps> = memo(({
             </Text>
           </View>
         </View>
+
+        {/* ── XP Breakdown (Module 11) ── */}
+        {isSuccess && xpBreakdown && (
+          <GlassPanel style={styles.breakdownPanel}>
+            <Text style={styles.breakdownTitle}>XP BREAKDOWN</Text>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>BASE</Text>
+              <Text style={styles.breakdownValue}>+{xpBreakdown.base}</Text>
+            </View>
+            {xpBreakdown.classBonus > 0 && (
+              <View style={styles.breakdownRow}>
+                <Text style={[styles.breakdownLabel, { color: Colors.textAmber }]}>CLASS BONUS</Text>
+                <Text style={[styles.breakdownValue, { color: Colors.textAmber }]}>+{xpBreakdown.classBonus}</Text>
+              </View>
+            )}
+            {xpBreakdown.streakBonus > 0 && (
+              <View style={styles.breakdownRow}>
+                <Text style={[styles.breakdownLabel, { color: '#50FA7B' }]}>STREAK</Text>
+                <Text style={[styles.breakdownValue, { color: '#50FA7B' }]}>+{xpBreakdown.streakBonus}</Text>
+              </View>
+            )}
+            {xpBreakdown.speedBonus > 0 && (
+              <View style={styles.breakdownRow}>
+                <Text style={[styles.breakdownLabel, { color: Colors.purple }]}>SPEED</Text>
+                <Text style={[styles.breakdownValue, { color: Colors.purple }]}>+{xpBreakdown.speedBonus}</Text>
+              </View>
+            )}
+            {xpBreakdown.levelBonus > 0 && (
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>LEVEL SCALING</Text>
+                <Text style={styles.breakdownValue}>+{xpBreakdown.levelBonus}</Text>
+              </View>
+            )}
+            <View style={[styles.breakdownRow, styles.breakdownTotalRow]}>
+              <Text style={styles.breakdownTotalLabel}>TOTAL</Text>
+              <Text style={[styles.breakdownTotalValue, { color: Colors.textCyan }]}>
+                +{xpBreakdown.total}
+              </Text>
+            </View>
+          </GlassPanel>
+        )}
 
         {/* ── Unlock Notification ── */}
         {unlockedModule && isSuccess && (
@@ -347,6 +393,54 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceMono-Regular',
     color: Colors.textPrimary,
     letterSpacing: 2,
+  },
+
+  // XP Breakdown (Module 11)
+  breakdownPanel: {
+    marginBottom: 12,
+  },
+  breakdownTitle: {
+    fontSize: 8,
+    fontFamily: 'SpaceMono-Regular',
+    color: Colors.textDim,
+    letterSpacing: 3,
+    marginBottom: 8,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  breakdownLabel: {
+    fontSize: 9,
+    fontFamily: 'SpaceMono-Regular',
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+    opacity: 0.7,
+  },
+  breakdownValue: {
+    fontSize: 9,
+    fontFamily: 'SpaceMono-Regular',
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+  },
+  breakdownTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 245, 255, 0.15)',
+    marginTop: 4,
+    paddingTop: 6,
+  },
+  breakdownTotalLabel: {
+    fontSize: 9,
+    fontFamily: 'SpaceMono-Regular',
+    color: Colors.textCyan,
+    letterSpacing: 2,
+  },
+  breakdownTotalValue: {
+    fontSize: 11,
+    fontFamily: 'SpaceMono-Regular',
+    letterSpacing: 1,
   },
 
   // Stable

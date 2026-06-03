@@ -1,9 +1,14 @@
+// IGNYX Player HUD — Module 11
+// The operator's status at a glance. Level. XP. Streak. Class.
+// Every pixel of this bar tells a story of progression.
+
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { GlassPanel } from './GlassPanel';
 import { useGameStore } from '../store/useGameStore';
 import { Colors } from '../constants/colors';
-import type { ModuleId, ModuleState } from '../constants/gameState';
+import { getXPProgress, getStreakBonus, getClassTitle } from '../constants/progression';
+import type { ModuleId, ModuleState, OperatorClass } from '../constants/gameState';
 
 const MODULE_ORDER: ModuleId[] = [
   'kernel_core',
@@ -13,6 +18,14 @@ const MODULE_ORDER: ModuleId[] = [
   'security',
   'ai_core',
 ];
+
+// Class-specific accent colors for the level badge
+const CLASS_COLORS: Record<OperatorClass, string> = {
+  ARCHITECT: Colors.textCyan,
+  OPERATIVE: Colors.textAmber,
+  GHOST: '#50FA7B',
+  UNKNOWN: Colors.textDim,
+};
 
 const getDotColor = (module: ModuleState): string => {
   if (!module.unlocked) return Colors.dotOffline;
@@ -29,29 +42,62 @@ export const PlayerHUD: React.FC = () => {
   const level = useGameStore((s) => s.level);
   const modules = useGameStore((s) => s.modules);
   const gameState = useGameStore((s) => s.gameState);
+  const consecutiveSuccesses = useGameStore((s) => s.consecutiveSuccesses);
 
-  // XP progress to next level
-  const xpInLevel = xp % 500;
-  const xpProgress = xpInLevel / 500;
+  // XP progress within current level (Module 11: uses proper curve)
+  const xpProgress = getXPProgress(xp);
+  const streak = getStreakBonus(consecutiveSuccesses);
+  const classTitle = getClassTitle(operatorClass, level);
+  const classColor = CLASS_COLORS[operatorClass] || Colors.textDim;
 
   return (
     <View style={styles.container} pointerEvents="none">
       {/* Bottom left: Operator info + XP */}
       <View style={styles.leftHUD}>
         <GlassPanel>
+          {/* Operator name + class title */}
           <Text style={styles.operatorName}>{operatorName}</Text>
           <Text style={[
             styles.operatorClass,
-            { color: gameState === 'breakdown' ? Colors.purple : Colors.textDim },
+            { color: gameState === 'breakdown' ? Colors.purple : classColor },
           ]}>
-            {operatorClass}
+            {operatorClass !== 'UNKNOWN' ? classTitle : operatorClass}
           </Text>
-          <View style={styles.xpBarContainer}>
-            <View style={styles.xpBarBg}>
-              <View style={[styles.xpBarFill, { width: `${xpProgress * 100}%` }]} />
+
+          {/* Level badge with class color */}
+          <View style={styles.levelRow}>
+            <View style={[styles.levelBadge, { borderColor: classColor }]}>
+              <Text style={[styles.levelText, { color: classColor }]}>{level}</Text>
             </View>
-            <Text style={styles.xpText}>LV{level}</Text>
+
+            {/* XP bar with numeric display */}
+            <View style={styles.xpBarContainer}>
+              <View style={styles.xpBarBg}>
+                <View style={[styles.xpBarFill, {
+                  width: `${xpProgress.progress * 100}%`,
+                  backgroundColor: classColor,
+                }]} />
+              </View>
+              <Text style={styles.xpText}>
+                {xpProgress.current}/{xpProgress.required}
+              </Text>
+            </View>
           </View>
+
+          {/* Streak indicator */}
+          {consecutiveSuccesses >= 3 && (
+            <View style={styles.streakRow}>
+              <Text style={[styles.streakIcon, { color: streak.multiplier >= 2 ? Colors.textAmber : Colors.textCyan }]}>
+                {streak.multiplier >= 2 ? '>>>' : streak.multiplier >= 1.75 ? '>>' : '>'}
+              </Text>
+              <Text style={[styles.streakLabel, { color: streak.multiplier >= 2 ? Colors.textAmber : Colors.textCyan }]}>
+                {streak.label}
+              </Text>
+              <Text style={styles.streakCount}>
+                x{consecutiveSuccesses}
+              </Text>
+            </View>
+          )}
         </GlassPanel>
       </View>
 
@@ -88,7 +134,7 @@ const styles = StyleSheet.create({
     zIndex: 200,
   },
   leftHUD: {
-    maxWidth: 160,
+    maxWidth: 180,
   },
   rightHUD: {
     maxWidth: 120,
@@ -101,34 +147,72 @@ const styles = StyleSheet.create({
   },
   operatorClass: {
     color: Colors.textDim,
-    fontSize: 9,
+    fontSize: 8,
     fontFamily: 'SpaceMono-Regular',
     letterSpacing: 1.5,
-    marginTop: 2,
+    marginTop: 1,
   },
-  xpBarContainer: {
+  levelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 5,
     gap: 6,
   },
-  xpBarBg: {
+  levelBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelText: {
+    fontSize: 10,
+    fontFamily: 'SpaceMono-Regular',
+    letterSpacing: 0,
+  },
+  xpBarContainer: {
     flex: 1,
-    height: 2,
+    gap: 2,
+  },
+  xpBarBg: {
+    height: 3,
     backgroundColor: Colors.xpEmpty,
-    borderRadius: 1,
+    borderRadius: 1.5,
     overflow: 'hidden',
   },
   xpBarFill: {
     height: '100%',
-    backgroundColor: Colors.xpFill,
-    borderRadius: 1,
+    borderRadius: 1.5,
   },
   xpText: {
     color: Colors.textDim,
-    fontSize: 8,
+    fontSize: 7,
+    fontFamily: 'SpaceMono-Regular',
+    letterSpacing: 0.5,
+    opacity: 0.7,
+  },
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  streakIcon: {
+    fontSize: 9,
     fontFamily: 'SpaceMono-Regular',
     letterSpacing: 1,
+  },
+  streakLabel: {
+    fontSize: 7,
+    fontFamily: 'SpaceMono-Regular',
+    letterSpacing: 1.5,
+  },
+  streakCount: {
+    color: Colors.textDim,
+    fontSize: 7,
+    fontFamily: 'SpaceMono-Regular',
+    letterSpacing: 0.5,
   },
   dotsRow: {
     flexDirection: 'row',

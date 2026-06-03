@@ -1,6 +1,7 @@
-// IGNYX Settings Screen — Module 10
+// IGNYX Settings Screen — Module 10 + Module 11
 // The operator's control panel. Accessibility. Sound. Restore points. Nuclear reset.
 // Every setting is a choice. Every choice shapes the experience.
+// Progression info shows the operator's journey through the system.
 
 import React, { useCallback, useState } from 'react';
 import {
@@ -15,6 +16,7 @@ import { ShellLayout } from '../components/ShellLayout';
 import { GlassPanel } from '../components/GlassPanel';
 import { Colors } from '../constants/colors';
 import { useGameStore } from '../store/useGameStore';
+import { getXPProgress, getStreakBonus, getClassTitle, getRestorePointCost } from '../constants/progression';
 import type { ModuleId } from '../constants/gameState';
 import { useRouter } from 'expo-router';
 
@@ -35,6 +37,9 @@ export default function SettingsScreen() {
   const operatorName = useGameStore((s) => s.operatorName);
   const operatorClass = useGameStore((s) => s.operatorClass);
   const revealedFiles = useGameStore((s) => s.revealedFiles);
+  const consecutiveSuccesses = useGameStore((s) => s.consecutiveSuccesses);
+  const totalMissionsCompleted = useGameStore((s) => s.totalMissionsCompleted);
+  const totalMissionsFailed = useGameStore((s) => s.totalMissionsFailed);
 
   // Actions
   const setAccessibility = useGameStore((s) => s.setAccessibility);
@@ -78,9 +83,10 @@ export default function SettingsScreen() {
   // ── Restore Point Handler ──────────────────────────────────
 
   const handleLoadRestorePoint = useCallback((index: number) => {
+    const cost = getRestorePointCost(level);
     Alert.alert(
       'LOAD RESTORE POINT',
-      `This will cost 200 XP and apply -15% integrity to all modules. Continue?`,
+      `This will cost ${cost} XP and apply -15% integrity to all modules. Continue?`,
       [
         { text: 'CANCEL', style: 'cancel' },
         {
@@ -92,7 +98,7 @@ export default function SettingsScreen() {
         },
       ],
     );
-  }, [loadRestorePoint]);
+  }, [loadRestorePoint, level]);
 
   // ── Reset Handler ──────────────────────────────────────────
 
@@ -158,11 +164,23 @@ export default function SettingsScreen() {
             <Text style={[styles.infoValue, { color: Colors.textCyan }]}>{operatorClass}</Text>
           </View>
           <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>TITLE</Text>
+            <Text style={[styles.infoValue, { color: Colors.textAmber, fontSize: 9 }]}>
+              {getClassTitle(operatorClass, level)}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>LEVEL</Text>
             <Text style={styles.infoValue}>{level}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>XP</Text>
+            <Text style={styles.infoValue}>
+              {getXPProgress(xp).current}/{getXPProgress(xp).required}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>TOTAL XP</Text>
             <Text style={styles.infoValue}>{xp}</Text>
           </View>
           <View style={styles.infoRow}>
@@ -176,6 +194,20 @@ export default function SettingsScreen() {
               {systemIntegrity}%
             </Text>
           </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>MISSIONS</Text>
+            <Text style={styles.infoValue}>
+              {totalMissionsCompleted} OK / {totalMissionsFailed} FAIL
+            </Text>
+          </View>
+          {consecutiveSuccesses >= 3 && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>STREAK</Text>
+              <Text style={[styles.infoValue, { color: '#50FA7B' }]}>
+                {consecutiveSuccesses} ({getStreakBonus(consecutiveSuccesses).label})
+              </Text>
+            </View>
+          )}
         </GlassPanel>
 
         {/* ── Accessibility ── */}
@@ -250,7 +282,7 @@ export default function SettingsScreen() {
         <GlassPanel active={restorePoints.length > 0} style={styles.section}>
           <Text style={styles.sectionTitle}>RESTORE POINTS</Text>
           <Text style={styles.sectionDesc}>
-            Load a restore point to roll back system state. Cost: 200 XP + -15% all module integrity.
+            Load a restore point to roll back system state. Cost: {getRestorePointCost(level)} XP + -15% all module integrity.
           </Text>
 
           {restorePoints.length === 0 ? (

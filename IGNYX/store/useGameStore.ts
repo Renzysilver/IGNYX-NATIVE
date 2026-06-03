@@ -1,11 +1,13 @@
-// IGNYX Game Store — Module 10
+// IGNYX Game Store — Module 10 + Module 11
 // Full state persistence. Revealed files. System degradation. Restore points.
-// Every choice survives. Every session continues. The system never forgets.
+// XP progression. Level milestones. The system never forgets. The operator evolves.
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameState, OperatorClass, ModuleId, ModuleState } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
+import { getLevelFromXP, getRestorePointCost, getXPProgress } from '../constants/progression';
+import type { XPBreakdown } from '../constants/progression';
 
 // ─── Sub-Types ────────────────────────────────────────────────
 
@@ -55,6 +57,12 @@ interface GameStore {
   consecutiveSuccesses: number;
   consecutiveFailures: number;
 
+  // Progression (Module 11)
+  totalMissionsCompleted: number;
+  totalMissionsFailed: number;
+  lastXPGain: XPBreakdown | null;
+  pendingLevelUp: number | null; // New level if level-up just occurred
+
   // Boot
   hasBooted: boolean;
   hasProfiled: boolean;
@@ -77,12 +85,13 @@ interface GameStore {
   setOperatorName: (name: string) => void;
   setOperatorClass: (cls: OperatorClass) => void;
   addXP: (amount: number) => void;
+  addXPWithBreakdown: (breakdown: XPBreakdown) => void;
   setSystemIntegrity: (value: number) => void;
   degradeIntegrity: (amount: number) => void;
   restoreIntegrity: (amount: number) => void;
   setGameState: (state: GameState) => void;
   setEditorFocused: (focused: boolean) => void;
-  completeMission: (moduleId: ModuleId) => void;
+  completeMission: (moduleId: ModuleId, xpBreakdown?: XPBreakdown) => void;
   failMission: (moduleId: ModuleId) => void;
   unlockModule: (moduleId: ModuleId) => void;
   setBooted: (booted: boolean) => void;
@@ -98,6 +107,7 @@ interface GameStore {
   loadRestorePoint: (index: number) => void;
   revealFile: (filePath: string) => void;
   isFileRevealed: (filePath: string) => boolean;
+  clearPendingLevelUp: () => void;
   resetGame: () => void;
   persistState: () => Promise<void>;
   hydrateState: () => Promise<void>;
@@ -179,6 +189,8 @@ const TRANSIENT_FIELDS: (keyof GameStore)[] = [
   'isEditorFocused',
   'activeMission',
   'hasHydrated',
+  'lastXPGain',
+  'pendingLevelUp',
 ];
 
 /**
@@ -188,13 +200,13 @@ const TRANSIENT_FIELDS: (keyof GameStore)[] = [
 const serializeState = (state: GameStore): string => {
   const serializable: Record<string, unknown> = {};
   const actionKeys = new Set<string>([
-    'setOperatorName', 'setOperatorClass', 'addXP', 'setSystemIntegrity',
+    'setOperatorName', 'setOperatorClass', 'addXP', 'addXPWithBreakdown', 'setSystemIntegrity',
     'degradeIntegrity', 'restoreIntegrity', 'setGameState', 'setEditorFocused',
     'completeMission', 'failMission', 'unlockModule', 'setBooted', 'setProfiled',
     'setAccessibility', 'setSoundEnabled', 'setMasterVolume',
     'resetConsecutiveSuccesses', 'incrementConsecutiveSuccesses',
     'startMission', 'endMission', 'checkRestorePoints', 'loadRestorePoint',
-    'revealFile', 'isFileRevealed', 'resetGame', 'persistState', 'hydrateState',
+    'revealFile', 'isFileRevealed', 'clearPendingLevelUp', 'resetGame', 'persistState', 'hydrateState',
     'setHasHydrated',
   ]);
 
@@ -224,6 +236,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   sessionId: 1,
   consecutiveSuccesses: 0,
   consecutiveFailures: 0,
+  totalMissionsCompleted: 0,
+  totalMissionsFailed: 0,
+  lastXPGain: null,
+  pendingLevelUp: null,
   hasBooted: false,
   hasProfiled: false,
   reducedMotion: false,
@@ -244,8 +260,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
   addXP: (amount) => {
     const state = get();
     const newXP = state.xp + amount;
-    const newLevel = Math.floor(newXP / 500) + 1;
-    set({ xp: newXP, level: newLevel });
+    const newLevel = getLevelFromXP(newXP);
+    const prevLevel = state.level;
+    set({
+      xp: newXP,
+      level: newLevel,
+      pendingLevelUp: newLevel > prevLevel ? newLevel : state.pendingLevelUp,
+    });
+  },
+
+  addXPWithBreakdown: (breakdown: XPBreakdown) => {
+    const state = get();
+    const newXP = state.xp + breakdown.total;
+    const newLevel = getLevelFromXP(newXP);
+    const prevLevel = state.level;
+    set({
+      xp: newXP,
+      level: newLevel,
+      lastXPGain: breakdown,
+      pendingLevelUp: newLevel > prevLevel ? newLevel : state.pendingLevelUp,
+    });
   },
 
   // ── System Integrity ─────────────────────────────────────
@@ -272,7 +306,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // ── Mission Completion ───────────────────────────────────
 
-  completeMission: (moduleId) => {
+  completeMission: (moduleId, xpBreakdown) => {
     const state = get();
     const module = state.modules[moduleId];
     const newCompleted = module.missionsCompleted + 1;
@@ -306,9 +340,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newModules.ai_core = { ...newModules.ai_core, unlocked: true };
     }
 
-    const xpGain = 100 + Math.floor(state.level * 10);
+    // XP calculation — use breakdown if provided, otherwise fallback to legacy
+    const xpGain = xpBreakdown
+      ? xpBreakdown.total
+      : 100 + Math.floor(state.level * 10);
     const newXP = state.xp + xpGain;
-    const newLevel = Math.floor(newXP / 500) + 1;
+    const newLevel = getLevelFromXP(newXP);
+    const prevLevel = state.level;
 
     const restoredIntegrity = Math.min(100, state.systemIntegrity + 5);
 
@@ -321,6 +359,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeMission: null,
       systemIntegrity: restoredIntegrity,
       gameState: getGameStateFromIntegrity(restoredIntegrity),
+      totalMissionsCompleted: state.totalMissionsCompleted + 1,
+      lastXPGain: xpBreakdown ?? null,
+      pendingLevelUp: newLevel > prevLevel ? newLevel : state.pendingLevelUp,
     });
   },
 
@@ -344,6 +385,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       consecutiveSuccesses: 0,
       consecutiveFailures: state.consecutiveFailures + 1,
       activeMission: null,
+      totalMissionsFailed: state.totalMissionsFailed + 1,
     });
   },
 
@@ -433,10 +475,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       debuffedModules[key].integrity = Math.max(0, debuffedModules[key].integrity - 15);
     }
 
+    // Cost scales with level (Module 11)
+    const xpCost = getRestorePointCost(state.level);
+
     set({
       systemIntegrity: point.integrity,
       gameState: getGameStateFromIntegrity(point.integrity),
-      xp: Math.max(0, state.xp - 200),
+      xp: Math.max(0, state.xp - xpCost),
+      level: getLevelFromXP(Math.max(0, state.xp - xpCost)),
       modules: debuffedModules,
     });
   },
@@ -452,6 +498,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isFileRevealed: (filePath: string): boolean => {
     return get().revealedFiles.includes(filePath);
   },
+
+  // ── Level-Up State (Module 11) ──────────────────────────
+
+  clearPendingLevelUp: () => set({ pendingLevelUp: null }),
 
   // ── Nuclear Reset ────────────────────────────────────────
 
@@ -471,6 +521,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sessionId: 1,
       consecutiveSuccesses: 0,
       consecutiveFailures: 0,
+      totalMissionsCompleted: 0,
+      totalMissionsFailed: 0,
+      lastXPGain: null,
+      pendingLevelUp: null,
       hasBooted: false,
       hasProfiled: false,
     });
@@ -515,6 +569,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         sessionId: (parsed.sessionId ?? 1) + 1, // Increment session on each launch
         consecutiveSuccesses: 0, // Reset streaks on new session
         consecutiveFailures: 0,
+        totalMissionsCompleted: parsed.totalMissionsCompleted ?? 0,
+        totalMissionsFailed: parsed.totalMissionsFailed ?? 0,
+        lastXPGain: null,
+        pendingLevelUp: null,
         hasBooted: parsed.hasBooted ?? false,
         hasProfiled: parsed.hasProfiled ?? false,
         reducedMotion: parsed.reducedMotion ?? false,
@@ -546,6 +604,7 @@ useGameStore.subscribe((state, prevState) => {
   // Skip if only transient fields changed
   const transientKeys = new Set<string>([
     'isEditorFocused', 'activeMission', 'hasHydrated',
+    'lastXPGain', 'pendingLevelUp',
   ]);
 
   const changedKeys = Object.keys(state).filter(
