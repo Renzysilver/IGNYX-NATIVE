@@ -76,10 +76,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   onChangeCode,
   editable = true,
   language = 'python',
-  errorLines = [],
+  errorLines: errorLinesProp = [],
   onFocus,
   onBlur,
 }) => {
+  // Ensure errorLines is always number[] — avoids TS2345 with .includes()
+  const errorLines: number[] = errorLinesProp;
   const setEditorFocused = useGameStore((s) => s.setEditorFocused);
   const highContrast = useGameStore((s) => s.highContrast);
 

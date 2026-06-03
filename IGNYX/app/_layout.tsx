@@ -1,7 +1,14 @@
+// IGNYX Root Layout — Module 16
+// Error boundary wraps the entire app. If any screen crashes,
+// the system degrades gracefully instead of hard-crashing.
+
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { useGameStore } from '../store/useGameStore';
+import { useRouter } from 'expo-router';
 
-export default function RootLayout() {
+function RootLayoutInner() {
   return (
     <>
       <StatusBar style="light" />
@@ -27,5 +34,23 @@ export default function RootLayout() {
         <Stack.Screen name="victory" />
       </Stack>
     </>
+  );
+}
+
+export default function RootLayout() {
+  const resetGame = useGameStore((s) => s.resetGame);
+
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        // Could be extended to log to a remote service
+        console.error('[IGNYX Fatal]', error.message, errorInfo.componentStack);
+      }}
+      onReset={() => {
+        resetGame();
+      }}
+    >
+      <RootLayoutInner />
+    </ErrorBoundary>
   );
 }

@@ -1,4 +1,4 @@
-// IGNYX Victory Screen — Module 15
+// IGNYX Victory Screen — Module 15 + Module 16
 // The system is whole. All 30 missions complete. Integrity restored.
 // The operator did what seemed impossible. The OS lives.
 // This is the moment the system says: "Thank you."
@@ -20,6 +20,7 @@ import { getClassTitle, getStreakBonus } from '../constants/progression';
 import type { ModuleId, OperatorClass } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
 import { playSuccess } from '../services/AudioEngine';
+import { useHaptics } from '../hooks/useHaptics';
 import { useRouter } from 'expo-router';
 
 // ─── Phase Controller ────────────────────────────────────────────
@@ -185,6 +186,7 @@ export default function VictoryScreen() {
 
   const [phase, setPhase] = useState<VictoryPhase>(0);
   const hasPlayedSound = useRef(false);
+  const haptics = useHaptics();
 
   // Phase progression
   useEffect(() => {
@@ -192,6 +194,7 @@ export default function VictoryScreen() {
       if (!hasPlayedSound.current) {
         hasPlayedSound.current = true;
         setTimeout(() => playSuccess(), 1000);
+        setTimeout(() => haptics.levelUp(), 1200);
       }
       const t = setTimeout(() => setPhase(1), 1500);
       return () => clearTimeout(t);

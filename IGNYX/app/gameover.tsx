@@ -1,4 +1,4 @@
-// IGNYX Game Over Screen — Module 15
+// IGNYX Game Over Screen — Module 15 + Module 16
 // The system has collapsed. Integrity: 0%. The void consumes all.
 // But the operator is not gone. Restore points remain. Choice remains.
 // This is not the end. Unless you choose it to be.
@@ -20,6 +20,7 @@ import { getRestorePointCost, getClassTitle } from '../constants/progression';
 import type { ModuleId } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
 import { playGlitchLong, playAlert } from '../services/AudioEngine';
+import { useHaptics } from '../hooks/useHaptics';
 import { useRouter } from 'expo-router';
 
 // ─── Phase Controller ────────────────────────────────────────────
@@ -117,6 +118,7 @@ export default function GameOverScreen() {
 
   const [phase, setPhase] = useState<GameOverPhase>(0);
   const hasPlayedSound = useRef(false);
+  const haptics = useHaptics();
 
   // Phase progression
   useEffect(() => {
@@ -125,6 +127,7 @@ export default function GameOverScreen() {
       if (!hasPlayedSound.current) {
         hasPlayedSound.current = true;
         playGlitchLong();
+        haptics.gameOver();
       }
       const t = setTimeout(() => setPhase(1), 2000);
       return () => clearTimeout(t);

@@ -13,6 +13,7 @@ import type { ModuleId } from '../constants/gameState';
 import { MODULE_NAMES } from '../constants/gameState';
 import { getNextMission } from '../constants/missions';
 import { playAlert } from '../services/AudioEngine';
+import { useHaptics } from '../hooks/useHaptics';
 import { useSystemDegradation } from '../hooks/useSystemDegradation';
 import { useAchievements } from '../hooks/useAchievements';
 import { useOSEvents } from '../hooks/useOSEvents';
@@ -39,6 +40,9 @@ export default function ShellScreen() {
   const operatorClass = useGameStore((s) => s.operatorClass);
   const xp = useGameStore((s) => s.xp);
   const level = useGameStore((s) => s.level);
+
+  // Haptic feedback (Module 16)
+  const haptics = useHaptics();
 
   // System degradation — the system decays while the operator hesitates
   useSystemDegradation();
@@ -76,6 +80,7 @@ export default function ShellScreen() {
     const mod = modules[moduleId];
     if (!mod.unlocked) {
       playAlert();
+      haptics.warning();
       return;
     }
 

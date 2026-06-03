@@ -1,8 +1,8 @@
-// IGNYX Mission Screen — Module 05 + 06 + 09 + 11 + 12
+// IGNYX Mission Screen — Module 05 + 06 + 09 + 11 + 12 + 16
 // The operator's crucible. Broken code. A countdown. No second chances.
 // Full mission flow: BRIEFING → ALERT → ACTIVE → RESULT
 // Every mission is a repair. Every repair has consequences. Every XP gain is earned.
-// Every achievement unlocked is remembered.
+// Every achievement unlocked is remembered. Haptic feedback replaces raw vibration.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -13,7 +13,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Vibration,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -49,6 +48,7 @@ import {
 } from '../constants/progression';
 import type { ModuleId } from '../constants/gameState';
 import { useAchievements } from '../hooks/useAchievements';
+import { useHaptics } from '../hooks/useHaptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   playSuccess,
@@ -92,6 +92,9 @@ export default function MissionScreen() {
 
   // Achievement system (Module 12)
   const { checkAndUnlock } = useAchievements();
+
+  // Haptic feedback (Module 16)
+  const haptics = useHaptics();
 
   // Mission state
   const [stage, setStage] = useState<MissionStage>('briefing');
@@ -348,7 +351,7 @@ export default function MissionScreen() {
       setXpBreakdown(breakdown);
       setErrorLines([]);
 
-      Vibration.vibrate([30, 50, 30]);
+      haptics.success();
       playSuccess();
 
       // Track speed/streak bonus flags for achievement checking (Module 12)
@@ -379,7 +382,7 @@ export default function MissionScreen() {
       setFeedbackColor(Colors.textRed);
       setShowGlitch(true);
       setGlitchIntensity('medium');
-      Vibration.vibrate([100, 50, 100]);
+      haptics.error();
       playFail();
 
       setTimeout(() => {
@@ -461,7 +464,7 @@ export default function MissionScreen() {
 
     setShowGlitch(true);
     setGlitchIntensity('high');
-    Vibration.vibrate([200, 100, 200, 100, 200]);
+    haptics.heavy();
     playFail();
 
     setTimeout(() => {

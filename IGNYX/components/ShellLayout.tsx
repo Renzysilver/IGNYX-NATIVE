@@ -1,7 +1,8 @@
-// IGNYX Shell Layout — Module 03 + Module 14
-// The 8-layer Glass Neural OS wrapper. Every screen lives here.
+// IGNYX Shell Layout — Module 03 + Module 14 + Module 16
+// The 10-layer Glass Neural OS wrapper. Every screen lives here.
 // Module 14: LevelUpCelebration wired to store. Periodic glitch pulse
 // scales with game state. The system breathes. The system warns.
+// Module 16: State transition cutscenes. The system transforms.
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -14,6 +15,7 @@ import { AmbientOverlay } from '../components/AmbientOverlay';
 import { GlitchOverlay } from '../components/GlitchOverlay';
 import { AudioEngine } from '../components/AudioEngine';
 import { LevelUpCelebration } from '../components/LevelUpCelebration';
+import { StateTransition } from '../components/StateTransition';
 import { useGameStore } from '../store/useGameStore';
 import { Colors } from '../constants/colors';
 import { getClassTitle, getMilestonesForLevel } from '../constants/progression';
@@ -35,6 +37,7 @@ import type { GameState } from '../constants/gameState';
  * 7. Alert Overlay (over everything, never blocks editor)
  * 8. Achievement Toast (top notifications for unlocked achievements)
  * 9. Level Up Celebration (full-screen overlay, auto-dismisses)
+ * 10. State Transition Cutscene (crossing integrity thresholds)
  * + Periodic Glitch Pulse (state-reactive random glitch)
  */
 interface ShellLayoutProps {
@@ -179,6 +182,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({ children, darkMode = f
         milestones={levelUpMilestones}
         onComplete={handleLevelUpComplete}
       />
+
+      {/* LAYER 9 — State Transition Cutscene (Module 16) */}
+      <StateTransition />
     </View>
   );
 };

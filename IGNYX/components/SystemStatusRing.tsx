@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import type { DimensionValue } from 'react-native';
 import { useGameStore } from '../store/useGameStore';
 import { Colors } from '../constants/colors';
-import type { ModuleId } from '../constants/gameState';
+import type { ModuleId, ModuleState } from '../constants/gameState';
 
 export const SystemStatusRing: React.FC = () => {
   const systemIntegrity = useGameStore((s) => s.systemIntegrity);
@@ -11,8 +11,8 @@ export const SystemStatusRing: React.FC = () => {
   const modules = useGameStore((s) => s.modules);
 
   // Find the current active module (first unlocked with incomplete missions)
-  const activeModule = Object.values(modules).find(
-    (m) => m.unlocked && m.missionsCompleted < m.totalMissions
+  const activeModule = Object.values(modules as Record<ModuleId, ModuleState>).find(
+    (m: ModuleState) => m.unlocked && m.missionsCompleted < m.totalMissions
   );
 
   const integrityColor = gameState === 'normal' ? Colors.textCyan

@@ -1,7 +1,7 @@
-// IGNYX Game Store — Module 10 + Module 11 + Module 12 + Module 13 + Module 15
+// IGNYX Game Store — Module 10 + 11 + 12 + 13 + 15 + 16
 // Full state persistence. Revealed files. System degradation. Restore points.
 // XP progression. Level milestones. Achievements. OS Events. Endgame flags.
-// The system never forgets. The operator evolves. The story has an ending.
+// Edge case hardening. NaN protection. Safe hydration. The system never forgets.
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -204,10 +204,20 @@ const createInitialModules = (): Record<ModuleId, ModuleState> => ({
 // ─── Helpers ──────────────────────────────────────────────────
 
 const getGameStateFromIntegrity = (integrity: number): GameState => {
-  if (integrity > 75) return 'normal';
-  if (integrity > 50) return 'warning';
-  if (integrity > 25) return 'critical';
+  // NaN protection — if integrity becomes NaN, treat as breakdown
+  const safe = Number.isFinite(integrity) ? integrity : 0;
+  if (safe > 75) return 'normal';
+  if (safe > 50) return 'warning';
+  if (safe > 25) return 'critical';
   return 'breakdown';
+};
+
+/**
+ * Clamp a number to safe bounds. Returns fallback if value is NaN/Infinity.
+ */
+const safeClamp = (value: number, min: number, max: number, fallback: number = min): number => {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
 };
 
 /**
@@ -299,24 +309,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   addXP: (amount) => {
     const state = get();
-    const newXP = state.xp + amount;
+    const safeAmount = safeClamp(amount, -99999, 999999, 0);
+    const newXP = Math.max(0, state.xp + safeAmount);
     const newLevel = getLevelFromXP(newXP);
     const prevLevel = state.level;
     set({
       xp: newXP,
-      level: newLevel,
+      level: safeClamp(newLevel, 1, 99, 1),
       pendingLevelUp: newLevel > prevLevel ? newLevel : state.pendingLevelUp,
     });
   },
 
   addXPWithBreakdown: (breakdown: XPBreakdown) => {
     const state = get();
-    const newXP = state.xp + breakdown.total;
+    const safeTotal = safeClamp(breakdown.total, 0, 999999, 0);
+    const newXP = state.xp + safeTotal;
     const newLevel = getLevelFromXP(newXP);
     const prevLevel = state.level;
     set({
       xp: newXP,
-      level: newLevel,
+      level: safeClamp(newLevel, 1, 99, 1),
       lastXPGain: breakdown,
       pendingLevelUp: newLevel > prevLevel ? newLevel : state.pendingLevelUp,
     });
@@ -325,13 +337,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // ── System Integrity ─────────────────────────────────────
 
   setSystemIntegrity: (value) => {
-    const clamped = Math.max(0, Math.min(100, value));
+    const clamped = safeClamp(value, 0, 100, 100);
     set({ systemIntegrity: clamped, gameState: getGameStateFromIntegrity(clamped) });
   },
 
   degradeIntegrity: (amount) => {
     const state = get();
-    const newValue = Math.max(0, state.systemIntegrity - amount);
+    const safeAmount = safeClamp(amount, 0, 100, 1);
+    const newValue = Math.max(0, state.systemIntegrity - safeAmount);
     set({ systemIntegrity: newValue, gameState: getGameStateFromIntegrity(newValue) });
     // Check for game over (Module 15)
     if (newValue <= 0) {
@@ -341,7 +354,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   restoreIntegrity: (amount) => {
     const state = get();
-    const newValue = Math.min(100, state.systemIntegrity + amount);
+    const safeAmount = safeClamp(amount, 0, 100, 1);
+    const newValue = Math.min(100, state.systemIntegrity + safeAmount);
     set({ systemIntegrity: newValue, gameState: getGameStateFromIntegrity(newValue) });
   },
 
@@ -463,7 +477,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // ── Sound ────────────────────────────────────────────────
 
   setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
-  setMasterVolume: (volume) => set({ masterVolume: Math.max(0, Math.min(1, volume)) }),
+  setMasterVolume: (volume) => set({ masterVolume: safeClamp(volume, 0, 1, 0.7) }),
 
   // ── Streaks ──────────────────────────────────────────────
 
@@ -666,39 +680,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const parsed = JSON.parse(stored);
 
       // Merge stored data with current defaults (handles schema migrations)
+      // All numeric values are NaN-safe — if corrupted data is loaded, fall back to safe defaults
       set({
-        operatorName: parsed.operatorName ?? '',
+        operatorName: typeof parsed.operatorName === 'string' ? parsed.operatorName : '',
         operatorClass: parsed.operatorClass ?? 'UNKNOWN',
-        xp: parsed.xp ?? 0,
-        level: parsed.level ?? 1,
-        systemIntegrity: parsed.systemIntegrity ?? 100,
+        xp: safeClamp(parsed.xp ?? 0, 0, 9999999, 0),
+        level: safeClamp(parsed.level ?? 1, 1, 99, 1),
+        systemIntegrity: safeClamp(parsed.systemIntegrity ?? 100, 0, 100, 100),
         gameState: parsed.gameState ?? 'normal',
         modules: parsed.modules ?? createInitialModules(),
-        restorePoints: parsed.restorePoints ?? [],
-        revealedFiles: parsed.revealedFiles ?? [],
-        sessionId: (parsed.sessionId ?? 1) + 1, // Increment session on each launch
+        restorePoints: Array.isArray(parsed.restorePoints) ? parsed.restorePoints : [],
+        revealedFiles: Array.isArray(parsed.revealedFiles) ? parsed.revealedFiles : [],
+        sessionId: safeClamp((parsed.sessionId ?? 1) + 1, 1, 9999, 1), // Increment session on each launch
         consecutiveSuccesses: 0, // Reset streaks on new session
         consecutiveFailures: 0,
-        totalMissionsCompleted: parsed.totalMissionsCompleted ?? 0,
-        totalMissionsFailed: parsed.totalMissionsFailed ?? 0,
+        totalMissionsCompleted: safeClamp(parsed.totalMissionsCompleted ?? 0, 0, 9999, 0),
+        totalMissionsFailed: safeClamp(parsed.totalMissionsFailed ?? 0, 0, 9999, 0),
         lastXPGain: null,
         pendingLevelUp: null,
-        unlockedAchievements: parsed.unlockedAchievements ?? [],
+        unlockedAchievements: Array.isArray(parsed.unlockedAchievements) ? parsed.unlockedAchievements : [],
         pendingAchievements: [], // Always reset pending on hydration
         lastSpeedBonus: parsed.lastSpeedBonus ?? false,
         lastStreakBonus: parsed.lastStreakBonus ?? false,
-        eventLog: parsed.eventLog ?? [],
-        lastEventTimestamp: parsed.lastEventTimestamp ?? 0,
+        eventLog: Array.isArray(parsed.eventLog) ? parsed.eventLog : [],
+        lastEventTimestamp: safeClamp(parsed.lastEventTimestamp ?? 0, 0, Date.now() + 86400000, 0),
         gameOverTriggered: parsed.gameOverTriggered ?? false,
         victoryTriggered: parsed.victoryTriggered ?? false,
         hasBooted: parsed.hasBooted ?? false,
         hasProfiled: parsed.hasProfiled ?? false,
         reducedMotion: parsed.reducedMotion ?? false,
         highContrast: parsed.highContrast ?? false,
-        fontSize: parsed.fontSize ?? 'medium',
+        fontSize: ['small', 'medium', 'large'].includes(parsed.fontSize) ? parsed.fontSize : 'medium',
         osVoiceText: parsed.osVoiceText ?? false,
         soundEnabled: parsed.soundEnabled ?? true,
-        masterVolume: parsed.masterVolume ?? 0.7,
+        masterVolume: safeClamp(parsed.masterVolume ?? 0.7, 0, 1, 0.7),
         hasHydrated: true,
       });
     } catch (e) {
