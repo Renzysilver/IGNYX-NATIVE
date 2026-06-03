@@ -22,6 +22,7 @@ import { GlassPanel } from '../components/GlassPanel';
 import { Colors } from '../constants/colors';
 import { useGameStore } from '../store/useGameStore';
 import { useRouter } from 'expo-router';
+import { initializeAudioEngine, playBootFlicker, playGlitchLong, playDesignation } from '../services/AudioEngine';
 
 type BootStage = 'black' | 'flicker' | 'first_text' | 'rejection' | 'question' | 'input' | 'designation' | 'integration';
 
@@ -130,6 +131,11 @@ export default function BootScreen() {
     transform: [{ translateY: terminalTranslateY.value }],
   }));
 
+  // Initialize audio engine on mount
+  useEffect(() => {
+    initializeAudioEngine();
+  }, []);
+
   // STAGE 1: Black + Noise (0-3s)
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -148,6 +154,7 @@ export default function BootScreen() {
         withTiming(0, { duration: 80 })
       );
       Vibration.vibrate(50);
+      playBootFlicker();
     }, 200);
 
     const flash2 = setTimeout(() => {
@@ -156,6 +163,7 @@ export default function BootScreen() {
         withTiming(0, { duration: 80 })
       );
       Vibration.vibrate(50);
+      playBootFlicker();
     }, 680);
 
     const flash3 = setTimeout(() => {
@@ -164,6 +172,7 @@ export default function BootScreen() {
         withTiming(0, { duration: 80 })
       );
       Vibration.vibrate(50);
+      playBootFlicker();
     }, 1010);
 
     const done = setTimeout(() => {
@@ -182,6 +191,7 @@ export default function BootScreen() {
   const handleFirstTextComplete = useCallback(() => {
     setShowGlitch(true);
     setGlitchIntensity('high');
+    playGlitchLong();
     setTimeout(() => {
       setShowGlitch(false);
       setStage('rejection');
@@ -237,6 +247,7 @@ export default function BootScreen() {
     if (!nameInput.trim()) return;
     if (silenceTimer.current) clearTimeout(silenceTimer.current);
     Keyboard.dismiss();
+    playDesignation();
     setDesignationText(`DESIGNATION ACCEPTED: ${nameInput.trim().toUpperCase()}`);
     setStage('designation');
   }, [nameInput]);

@@ -39,6 +39,7 @@ import {
   type Token,
 } from '../constants/syntax';
 import { useGameStore } from '../store/useGameStore';
+import { pauseAmbientForEditor, resumeAmbientFromEditor } from '../services/AudioEngine';
 
 // ─── Layout Constants ──────────────────────────────────────────
 
@@ -258,12 +259,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     setEditorFocused(true);
+    pauseAmbientForEditor(); // Eye of the Hurricane — system holds its breath
     onFocus?.();
   }, [setEditorFocused, onFocus]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
     setEditorFocused(false);
+    resumeAmbientFromEditor(); // System exhales
     onBlur?.();
   }, [setEditorFocused, onBlur]);
 
