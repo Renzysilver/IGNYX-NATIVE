@@ -23,6 +23,8 @@ export default function RootLayout() {
         <Stack.Screen name="achievements" />
         <Stack.Screen name="events" />
         <Stack.Screen name="profile" />
+        <Stack.Screen name="gameover" />
+        <Stack.Screen name="victory" />
       </Stack>
     </>
   );

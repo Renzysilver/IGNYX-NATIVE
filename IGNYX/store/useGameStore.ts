@@ -1,6 +1,7 @@
-// IGNYX Game Store — Module 10 + Module 11 + Module 12 + Module 13
+// IGNYX Game Store — Module 10 + Module 11 + Module 12 + Module 13 + Module 15
 // Full state persistence. Revealed files. System degradation. Restore points.
-// XP progression. Level milestones. Achievements. OS Events. The system never forgets. The operator evolves.
+// XP progression. Level milestones. Achievements. OS Events. Endgame flags.
+// The system never forgets. The operator evolves. The story has an ending.
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -74,6 +75,10 @@ interface GameStore {
   eventLog: OSEvent[];            // Persistent event log (last 50 events)
   lastEventTimestamp: number;     // Timestamp of last event (for ambient cooldown)
 
+  // Endgame (Module 15)
+  gameOverTriggered: boolean;     // True when integrity hit 0 — routes to gameover
+  victoryTriggered: boolean;      // True when all 30 missions complete — routes to victory
+
   // Boot
   hasBooted: boolean;
   hasProfiled: boolean;
@@ -128,6 +133,10 @@ interface GameStore {
   addEvent: (event: OSEvent) => void;
   clearEventLog: () => void;
   getRecentEvents: (count: number) => OSEvent[];
+  // Endgame (Module 15)
+  checkEndgame: () => void;
+  clearGameOver: () => void;
+  clearVictory: () => void;
   resetGame: () => void;
   persistState: () => Promise<void>;
   hydrateState: () => Promise<void>;
@@ -230,6 +239,7 @@ const serializeState = (state: GameStore): string => {
     'setHasHydrated',
     'unlockAchievement', 'clearPendingAchievements', 'setLastSpeedBonus', 'setLastStreakBonus',
     'addEvent', 'clearEventLog', 'getRecentEvents',
+    'checkEndgame', 'clearGameOver', 'clearVictory',
   ]);
 
   for (const key of Object.keys(state)) {
@@ -268,6 +278,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastStreakBonus: false,
   eventLog: [],
   lastEventTimestamp: 0,
+  gameOverTriggered: false,
+  victoryTriggered: false,
   hasBooted: false,
   hasProfiled: false,
   reducedMotion: false,
@@ -321,6 +333,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     const newValue = Math.max(0, state.systemIntegrity - amount);
     set({ systemIntegrity: newValue, gameState: getGameStateFromIntegrity(newValue) });
+    // Check for game over (Module 15)
+    if (newValue <= 0) {
+      get().checkEndgame();
+    }
   },
 
   restoreIntegrity: (amount) => {
@@ -391,6 +407,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastXPGain: xpBreakdown ?? null,
       pendingLevelUp: newLevel > prevLevel ? newLevel : state.pendingLevelUp,
     });
+
+    // Check for victory — all 30 missions complete (Module 15)
+    get().checkEndgame();
   },
 
   failMission: (moduleId) => {
@@ -563,6 +582,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return get().eventLog.slice(0, count);
   },
 
+  // ── Endgame Detection (Module 15) ───────────────────────
+
+  checkEndgame: () => {
+    const state = get();
+    // Game Over: integrity reaches 0
+    if (state.systemIntegrity <= 0 && !state.gameOverTriggered) {
+      set({ gameOverTriggered: true });
+      return;
+    }
+    // Victory: all 30 missions completed
+    const totalCompleted = Object.values(state.modules).reduce(
+      (sum, m) => sum + m.missionsCompleted, 0
+    );
+    if (totalCompleted >= 30 && !state.victoryTriggered) {
+      set({ victoryTriggered: true });
+      return;
+    }
+  },
+
+  clearGameOver: () => set({ gameOverTriggered: false }),
+
+  clearVictory: () => set({ victoryTriggered: false }),
+
   // ── Nuclear Reset ────────────────────────────────────────
 
   resetGame: () => {
@@ -591,6 +633,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastStreakBonus: false,
       eventLog: [],
       lastEventTimestamp: 0,
+      gameOverTriggered: false,
+      victoryTriggered: false,
       hasBooted: false,
       hasProfiled: false,
     });
@@ -645,6 +689,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         lastStreakBonus: parsed.lastStreakBonus ?? false,
         eventLog: parsed.eventLog ?? [],
         lastEventTimestamp: parsed.lastEventTimestamp ?? 0,
+        gameOverTriggered: parsed.gameOverTriggered ?? false,
+        victoryTriggered: parsed.victoryTriggered ?? false,
         hasBooted: parsed.hasBooted ?? false,
         hasProfiled: parsed.hasProfiled ?? false,
         reducedMotion: parsed.reducedMotion ?? false,

@@ -1,6 +1,6 @@
-// IGNYX Route Director — Module 10
-// Hydrate persisted state. Then route: boot → profiling → shell.
-// The system remembers. The operator returns.
+// IGNYX Route Director — Module 10 + Module 15
+// Hydrate persisted state. Then route: boot → profiling → endgame? → shell.
+// The system remembers. The operator returns. The story has endings.
 
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
@@ -13,6 +13,8 @@ export default function Index() {
   const hasProfiled = useGameStore((s) => s.hasProfiled);
   const hasHydrated = useGameStore((s) => s.hasHydrated);
   const hydrateState = useGameStore((s) => s.hydrateState);
+  const gameOverTriggered = useGameStore((s) => s.gameOverTriggered);
+  const victoryTriggered = useGameStore((s) => s.victoryTriggered);
 
   const [isHydrating, setIsHydrating] = useState(true);
 
@@ -33,9 +35,16 @@ export default function Index() {
     );
   }
 
-  // First time: go to boot
-  // After boot but before profiling: go to profiling
-  // After profiling: go to shell
+  // Endgame routing (Module 15)
+  // Game over takes priority over victory (shouldn't happen simultaneously, but just in case)
+  if (gameOverTriggered) {
+    return <Redirect href="/gameover" />;
+  }
+  if (victoryTriggered) {
+    return <Redirect href="/victory" />;
+  }
+
+  // Standard routing: boot → profiling → shell
   if (!hasBooted) {
     return <Redirect href="/boot" />;
   }
