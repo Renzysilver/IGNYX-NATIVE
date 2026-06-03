@@ -1,8 +1,9 @@
-// IGNYX Mission Screen — Module 05 + Module 06
+// IGNYX Mission Screen — Module 05 + 06 + 09
 // The operator's crucible. Broken code. A countdown. No second chances.
-// Integrated with the CodeEditor for syntax highlighting, line numbers, and Eye of the Hurricane.
+// Full mission flow: BRIEFING → ALERT → ACTIVE → RESULT
+// Every mission is a repair. Every repair has consequences.
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,16 +26,19 @@ import { GlassPanel } from '../components/GlassPanel';
 import { GlitchOverlay } from '../components/GlitchOverlay';
 import { AlertOverlayManager } from '../components/AlertOverlay';
 import { CodeEditor } from '../components/CodeEditor';
+import { MissionBriefing } from '../components/MissionBriefing';
+import { MissionResult, type MissionResultType } from '../components/MissionResult';
 import { Colors } from '../constants/colors';
 import { useGameStore } from '../store/useGameStore';
 import {
   getNextMission,
   validateCode,
   getErrorLines,
+  calculateFailureConsequences,
   type Mission,
 } from '../constants/missions';
 import type { ModuleId } from '../constants/gameState';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   playSuccess,
   playFail,
@@ -42,10 +46,19 @@ import {
   playAlert,
 } from '../services/AudioEngine';
 
-type MissionStage = 'alert' | 'active' | 'success' | 'fail' | 'timeout';
+// ─── Mission Flow Stages ──────────────────────────────────────
+// BRIEFING → The operator reads what's broken and decides to engage
+// ALERT → Flash alert, mission timer about to start
+// ACTIVE → Code editing + timer countdown
+// RESULT → Success / Fail / Timeout outcome display
+
+type MissionStage = 'briefing' | 'alert' | 'active' | 'result';
 
 export default function MissionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+
+  // Store
   const modules = useGameStore((s) => s.modules);
   const activeMission = useGameStore((s) => s.activeMission);
   const startMission = useGameStore((s) => s.startMission);
@@ -53,26 +66,48 @@ export default function MissionScreen() {
   const completeMission = useGameStore((s) => s.completeMission);
   const failMissionStore = useGameStore((s) => s.failMission);
   const degradeIntegrity = useGameStore((s) => s.degradeIntegrity);
+  const restoreIntegrity = useGameStore((s) => s.restoreIntegrity);
+  const addXP = useGameStore((s) => s.addXP);
   const checkRestorePoints = useGameStore((s) => s.checkRestorePoints);
-  const gameState = useGameStore((s) => s.gameState);
+  const systemIntegrity = useGameStore((s) => s.systemIntegrity);
 
-  const [stage, setStage] = useState<MissionStage>('alert');
+  // Mission state
+  const [stage, setStage] = useState<MissionStage>('briefing');
   const [mission, setMission] = useState<Mission | null>(null);
+  const [moduleId, setModuleId] = useState<ModuleId | null>(null);
   const [code, setCode] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
+
+  // Result state
+  const [resultType, setResultType] = useState<MissionResultType>('success');
   const [feedbackText, setFeedbackText] = useState('');
-  const [feedbackColor, setFeedbackColor] = useState<string>(Colors.textRed);
+  const [xpGained, setXpGained] = useState(0);
+  const [integrityDelta, setIntegrityDelta] = useState(0);
+  const [newSystemIntegrity, setNewSystemIntegrity] = useState(100);
+  const [unlockedModule, setUnlockedModule] = useState<ModuleId | null>(null);
+  const [moduleStabilized, setModuleStabilized] = useState(false);
+
+  // Editor state
+  const [errorLines, setErrorLines] = useState<number[]>([]);
   const [showGlitch, setShowGlitch] = useState(false);
   const [glitchIntensity, setGlitchIntensity] = useState<'low' | 'medium' | 'high'>('medium');
-  const [errorLines, setErrorLines] = useState<number[]>([]);
-  const [moduleId, setModuleId] = useState<ModuleId | null>(null);
+  const [feedbackColor, setFeedbackColor] = useState<string>(Colors.textRed);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasStartedRef = useRef(false);
+  const hasInitializedRef = useRef(false);
 
-  // ── Determine which module to show missions for ──────────────
+  // ── Determine which module this mission is for ──────────────
 
   const getActiveModuleId = (): ModuleId | null => {
+    // Check URL params first (from shell module tap)
+    if (params.moduleId && typeof params.moduleId === 'string') {
+      const mId = params.moduleId as ModuleId;
+      if (modules[mId]?.unlocked && modules[mId].missionsCompleted < modules[mId].totalMissions) {
+        return mId;
+      }
+    }
+
+    // Fall back to first available module
     const order: ModuleId[] = ['kernel_core', 'app_layer', 'network', 'data_system', 'security', 'ai_core'];
     for (const id of order) {
       if (modules[id]?.unlocked && modules[id].missionsCompleted < modules[id].totalMissions) {
@@ -82,13 +117,11 @@ export default function MissionScreen() {
     return null;
   };
 
-  // ── Error lines computed via getErrorLines from constants/missions ──
-
   // ── Initialize mission on mount ──────────────────────────────
 
   useEffect(() => {
-    if (hasStartedRef.current) return;
-    hasStartedRef.current = true;
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
 
     const mId = getActiveModuleId();
     if (!mId) {
@@ -107,21 +140,8 @@ export default function MissionScreen() {
     setMission(nextMission);
     setCode(nextMission.brokenCode);
     setTimeLeft(nextMission.timerSeconds);
-    setStage('alert');
-
-    // Fire the sector alert
-    setTimeout(() => {
-      AlertOverlayManager.show(
-        nextMission.alert,
-        Colors.textAmber,
-        3000,
-        () => {
-          setStage('active');
-          startMission(nextMission.id, mId);
-        },
-      );
-    }, 500);
-    playAlert();
+    // Start in briefing stage — operator reads before engaging
+    setStage('briefing');
   }, []);
 
   // ── Timer countdown ──────────────────────────────────────────
@@ -137,7 +157,6 @@ export default function MissionScreen() {
           return 0;
         }
 
-        // Timer warnings at 30s and 10s
         if (prev === 31) {
           AlertOverlayManager.show(
             '30 seconds remaining. Stabilize immediately.',
@@ -197,38 +216,98 @@ export default function MissionScreen() {
     transform: [{ scale: timerScale.value }],
   }));
 
+  // ── Handle briefing accept ───────────────────────────────────
+
+  const handleAcceptBriefing = useCallback(() => {
+    if (!mission || !moduleId) return;
+
+    // Transition to alert stage
+    setStage('alert');
+    playAlert();
+
+    // Fire the sector alert, then start the mission
+    setTimeout(() => {
+      AlertOverlayManager.show(
+        mission.alert,
+        Colors.textAmber,
+        3000,
+        () => {
+          setStage('active');
+          startMission(mission.id, moduleId);
+        },
+      );
+    }, 300);
+  }, [mission, moduleId, startMission]);
+
+  // ── Handle retreat from briefing ─────────────────────────────
+
+  const handleRetreat = useCallback(() => {
+    router.replace('/shell');
+  }, [router]);
+
   // ── Handle code changes ──────────────────────────────────────
 
   const handleCodeChange = useCallback((newCode: string) => {
     setCode(newCode);
-    // Clear error lines when code changes
     setErrorLines([]);
   }, []);
 
   // ── Handle code submission ───────────────────────────────────
 
   const handleSubmit = useCallback(() => {
-    if (!mission || stage !== 'active') return;
+    if (!mission || !moduleId || stage !== 'active') return;
 
     const result = validateCode(code, mission);
 
     if (result.correct) {
-      // Success
+      // ── SUCCESS ──
       if (timerRef.current) clearInterval(timerRef.current);
-      setStage('success');
-      setFeedbackText(mission.successMessage);
-      setFeedbackColor(Colors.textCyan);
-      setErrorLines([]);
-      completeMission(mission.moduleId);
+
+      // Calculate XP gain
+      const xpReward = mission.xpReward + Math.floor(useGameStore.getState().level * 10);
+
+      // Store the pre-mission integrity for delta calculation
+      const preIntegrity = systemIntegrity;
+
+      // Apply success to store
+      completeMission(moduleId);
       checkRestorePoints();
+
+      // Calculate what happened
+      const postIntegrity = useGameStore.getState().systemIntegrity;
+      const delta = postIntegrity - preIntegrity;
+
+      // Check for module unlock
+      const postModules = useGameStore.getState().modules;
+      let unlocked: ModuleId | null = null;
+      const unlockOrder: ModuleId[] = ['app_layer', 'network', 'data_system', 'security', 'ai_core'];
+      for (const mId of unlockOrder) {
+        if (postModules[mId].unlocked && !modules[mId].unlocked) {
+          unlocked = mId;
+          break;
+        }
+      }
+
+      // Check module stability
+      const stabilized = postModules[moduleId].stable && !modules[moduleId].stable;
+
+      // Set result state
+      setResultType('success');
+      setFeedbackText(mission.successMessage);
+      setXpGained(xpReward);
+      setIntegrityDelta(delta);
+      setNewSystemIntegrity(postIntegrity);
+      setUnlockedModule(unlocked);
+      setModuleStabilized(stabilized);
+      setErrorLines([]);
+
       Vibration.vibrate([30, 50, 30]);
       playSuccess();
 
-      setTimeout(() => {
-        router.replace('/shell');
-      }, 3000);
+      // Transition to result
+      setStage('result');
     } else {
-      // Fail — show feedback + error lines + glitch
+      // ── FAIL ──
       const lines = getErrorLines(code, mission);
       setErrorLines(lines);
       setFeedbackText(result.feedback);
@@ -242,23 +321,78 @@ export default function MissionScreen() {
         setShowGlitch(false);
       }, 600);
 
-      // Clear feedback after delay
       setTimeout(() => {
         setFeedbackText('');
       }, 4000);
+
+      // Apply failure consequences
+      const preIntegrity = systemIntegrity;
+      failMissionStore(moduleId);
+      checkRestorePoints();
+
+      const postIntegrity = useGameStore.getState().systemIntegrity;
+      const delta = postIntegrity - preIntegrity;
+
+      // Check for module unlock (failures can also unlock adjacent modules in rare cases)
+      const postModules = useGameStore.getState().modules;
+      let unlocked: ModuleId | null = null;
+      const unlockOrder: ModuleId[] = ['app_layer', 'network', 'data_system', 'security', 'ai_core'];
+      for (const mId of unlockOrder) {
+        if (postModules[mId].unlocked && !modules[mId].unlocked) {
+          unlocked = mId;
+          break;
+        }
+      }
+
+      const stabilized = postModules[moduleId].stable && !modules[moduleId].stable;
+
+      // Prepare result data but don't transition — let operator keep trying
+      // Only transition on 3rd consecutive failure
+      const consecutiveFailures = useGameStore.getState().consecutiveFailures;
+      if (consecutiveFailures >= 3) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setResultType('fail');
+        setFeedbackText(mission.failMessage);
+        setIntegrityDelta(delta);
+        setNewSystemIntegrity(postIntegrity);
+        setUnlockedModule(unlocked);
+        setModuleStabilized(stabilized);
+        setStage('result');
+      }
     }
-  }, [mission, code, stage, completeMission, checkRestorePoints, getErrorLines]);
+  }, [mission, code, stage, moduleId, completeMission, failMissionStore, checkRestorePoints, systemIntegrity, modules]);
 
   // ── Handle timeout ───────────────────────────────────────────
 
   const handleTimeout = useCallback(() => {
-    if (!mission) return;
-    setStage('timeout');
-    setFeedbackText(mission.timeoutMessage);
-    setFeedbackColor(Colors.textRed);
-    failMissionStore(mission.moduleId);
-    degradeIntegrity(10);
+    if (!mission || !moduleId) return;
+
+    const preIntegrity = systemIntegrity;
+    failMissionStore(moduleId);
+    degradeIntegrity(mission.timeoutIntegrityLoss);
     checkRestorePoints();
+
+    const postIntegrity = useGameStore.getState().systemIntegrity;
+    const delta = postIntegrity - preIntegrity;
+
+    const postModules = useGameStore.getState().modules;
+    let unlocked: ModuleId | null = null;
+    const unlockOrder: ModuleId[] = ['app_layer', 'network', 'data_system', 'security', 'ai_core'];
+    for (const mId of unlockOrder) {
+      if (postModules[mId].unlocked && !modules[mId].unlocked) {
+        unlocked = mId;
+        break;
+        }
+    }
+
+    const stabilized = postModules[moduleId].stable && !modules[moduleId].stable;
+
+    setResultType('timeout');
+    setFeedbackText(mission.timeoutMessage);
+    setIntegrityDelta(delta);
+    setNewSystemIntegrity(postIntegrity);
+    setUnlockedModule(unlocked);
+    setModuleStabilized(stabilized);
 
     setShowGlitch(true);
     setGlitchIntensity('high');
@@ -269,55 +403,80 @@ export default function MissionScreen() {
       setShowGlitch(false);
     }, 1200);
 
-    setTimeout(() => {
-      router.replace('/shell');
-    }, 4000);
-  }, [mission]);
+    setStage('result');
+  }, [mission, moduleId, failMissionStore, degradeIntegrity, checkRestorePoints, systemIntegrity, modules]);
+
+  // ── Handle continue from result ──────────────────────────────
+
+  const handleContinue = useCallback(() => {
+    router.replace('/shell');
+  }, [router]);
 
   // ── Render ───────────────────────────────────────────────────
 
   if (!mission) return null;
 
   return (
-    <ShellLayout darkMode>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
-      >
-        {/* ── Top bar: mission info + timer ── */}
-        <View style={styles.topBar}>
-          <View style={styles.missionInfo}>
-            <Text style={styles.missionId}>{mission.id}</Text>
-            <Text style={styles.missionTitle}>{mission.title}</Text>
-          </View>
-          <Animated.View style={[styles.timerContainer, timerAnimatedStyle]}>
-            <Text style={[styles.timer, { color: getTimerColor() }]}>
-              {formatTime(timeLeft)}
-            </Text>
-          </Animated.View>
+    <ShellLayout darkMode={stage === 'active'}>
+      {/* ── BRIEFING STAGE ── */}
+      {stage === 'briefing' && (
+        <View style={styles.container}>
+          <MissionBriefing
+            mission={mission}
+            onAccept={handleAcceptBriefing}
+            onRetreat={handleRetreat}
+          />
         </View>
+      )}
 
-        {/* ── Feedback text ── */}
-        {feedbackText ? (
-          <View style={styles.feedbackBar}>
-            <Text style={[styles.feedbackText, { color: feedbackColor }]}>
-              {feedbackText}
-            </Text>
+      {/* ── ALERT STAGE (waiting for alert overlay to dismiss) ── */}
+      {stage === 'alert' && (
+        <View style={styles.container}>
+          <View style={styles.alertWaitContainer}>
+            <Text style={styles.alertWaitText}>INITIALIZING MISSION...</Text>
           </View>
-        ) : null}
+        </View>
+      )}
 
-        {/* ── Code Editor (Module 06) ── */}
-        <CodeEditor
-          code={code}
-          onChangeCode={handleCodeChange}
-          editable={stage === 'active'}
-          language={mission.language}
-          errorLines={errorLines}
-        />
+      {/* ── ACTIVE STAGE (coding + timer) ── */}
+      {stage === 'active' && (
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+        >
+          {/* Top bar: mission info + timer */}
+          <View style={styles.topBar}>
+            <View style={styles.missionInfo}>
+              <Text style={styles.missionId}>{mission.id}</Text>
+              <Text style={styles.missionTitle}>{mission.title}</Text>
+            </View>
+            <Animated.View style={[styles.timerContainer, timerAnimatedStyle]}>
+              <Text style={[styles.timer, { color: getTimerColor() }]}>
+                {formatTime(timeLeft)}
+              </Text>
+            </Animated.View>
+          </View>
 
-        {/* ── Submit button ── */}
-        {stage === 'active' && (
+          {/* Feedback text */}
+          {feedbackText ? (
+            <View style={styles.feedbackBar}>
+              <Text style={[styles.feedbackText, { color: feedbackColor }]}>
+                {feedbackText}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Code Editor */}
+          <CodeEditor
+            code={code}
+            onChangeCode={handleCodeChange}
+            editable={stage === 'active'}
+            language={mission.language}
+            errorLines={errorLines}
+          />
+
+          {/* Submit button */}
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleSubmit}
@@ -327,27 +486,30 @@ export default function MissionScreen() {
               <Text style={styles.submitText}>EXECUTE</Text>
             </View>
           </TouchableOpacity>
-        )}
+        </KeyboardAvoidingView>
+      )}
 
-        {/* ── Success overlay ── */}
-        {stage === 'success' && (
-          <View style={styles.resultOverlay}>
-            <Text style={styles.successText}>{mission.successMessage}</Text>
-          </View>
-        )}
-
-        {/* ── Timeout overlay ── */}
-        {stage === 'timeout' && (
-          <View style={styles.resultOverlay}>
-            <Text style={styles.failText}>{mission.timeoutMessage}</Text>
-          </View>
-        )}
-      </KeyboardAvoidingView>
+      {/* ── RESULT STAGE ── */}
+      {stage === 'result' && (
+        <View style={styles.container}>
+          <MissionResult
+            mission={mission}
+            result={resultType}
+            feedback={feedbackText}
+            xpGained={xpGained}
+            integrityDelta={integrityDelta}
+            newSystemIntegrity={newSystemIntegrity}
+            unlockedModule={unlockedModule}
+            moduleStabilized={moduleStabilized}
+            onContinue={handleContinue}
+          />
+        </View>
+      )}
 
       {/* ── Glitch overlay ── */}
       <GlitchOverlay
         intensity={glitchIntensity}
-        duration={stage === 'timeout' ? 1200 : 600}
+        duration={stage === 'result' && resultType === 'timeout' ? 1200 : 600}
         active={showGlitch}
         onComplete={() => setShowGlitch(false)}
       />
@@ -363,6 +525,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 4,
     paddingBottom: 100,
+  },
+
+  // Alert wait
+  alertWaitContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertWaitText: {
+    fontSize: 12,
+    fontFamily: 'SpaceMono-Regular',
+    color: Colors.textAmber,
+    letterSpacing: 4,
   },
 
   // Top bar
@@ -435,32 +610,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'SpaceMono-Regular',
     letterSpacing: 4,
-  },
-
-  // Result overlays
-  resultOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    zIndex: 500,
-  },
-  successText: {
-    color: Colors.textCyan,
-    fontSize: 16,
-    fontFamily: 'SpaceMono-Regular',
-    letterSpacing: 3,
-    textAlign: 'center',
-  },
-  failText: {
-    color: Colors.textRed,
-    fontSize: 16,
-    fontFamily: 'SpaceMono-Regular',
-    letterSpacing: 3,
-    textAlign: 'center',
   },
 });

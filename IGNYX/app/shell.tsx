@@ -47,7 +47,7 @@ export default function ShellScreen() {
 
     const nextMission = getNextMission(moduleId, mod.missionsCompleted);
     if (nextMission) {
-      router.push('/mission');
+      router.push({ pathname: '/mission', params: { moduleId } });
     }
   }, [modules, router]);
 
